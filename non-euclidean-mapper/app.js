@@ -1062,6 +1062,11 @@
 
       // Interaction handlers
       if (isNestedPicker) {
+        g.addEventListener("mousedown", (e) => {
+          if (e.button === 0) {
+            e.stopPropagation();
+          }
+        });
         g.addEventListener("click", (e) => {
           e.stopPropagation();
           pickRoomInConnectionModal(room.id);
@@ -1143,6 +1148,7 @@
 
   function setupPanAndZoom(svgEl, getViewport, onUpdate) {
     let isPanning = false;
+    let hasMoved = false;
     let panStartX = 0;
     let panStartY = 0;
     let startPanX = 0;
@@ -1151,7 +1157,7 @@
     svgEl.addEventListener("mousedown", (e) => {
       if (e.button !== 0 && e.button !== 1) return;
       isPanning = true;
-      svgEl.classList.add("panning");
+      hasMoved = false;
       const vp = getViewport();
       panStartX = e.clientX;
       panStartY = e.clientY;
@@ -1161,9 +1167,14 @@
 
     window.addEventListener("mousemove", (e) => {
       if (!isPanning) return;
+      const dx = e.clientX - panStartX;
+      const dy = e.clientY - panStartY;
+      if (!hasMoved && Math.hypot(dx, dy) < 3) return;
+      hasMoved = true;
+      svgEl.classList.add("panning");
       const vp = getViewport();
-      vp.panX = Math.round(startPanX + (e.clientX - panStartX));
-      vp.panY = Math.round(startPanY + (e.clientY - panStartY));
+      vp.panX = Math.round(startPanX + dx);
+      vp.panY = Math.round(startPanY + dy);
       onUpdate(false);
     });
 
@@ -1171,7 +1182,10 @@
       if (!isPanning) return;
       isPanning = false;
       svgEl.classList.remove("panning");
-      onUpdate(true);
+      if (hasMoved) {
+        onUpdate(true);
+      }
+      hasMoved = false;
     });
 
     svgEl.addEventListener(
