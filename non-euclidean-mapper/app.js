@@ -496,6 +496,42 @@
     return null;
   }
 
+  const CARDINAL_OR_ORDINAL_TOKENS = new Set([
+    "n",
+    "north",
+    "s",
+    "south",
+    "e",
+    "east",
+    "w",
+    "west",
+    "ne",
+    "northeast",
+    "north-east",
+    "nw",
+    "northwest",
+    "north-west",
+    "se",
+    "southeast",
+    "south-east",
+    "sw",
+    "southwest",
+    "south-west",
+  ]);
+
+  /**
+   * Returns true if a connection label consists solely of cardinal/ordinal directions
+   * (excluding Up/Down), so it can be omitted on the visual map where mutual position shows direction.
+   */
+  function isCardinalOrOrdinalOnlyLabel(label = "") {
+    if (!label) return false;
+    const clean = label.trim().toLowerCase();
+    if (!clean) return false;
+    if (CARDINAL_OR_ORDINAL_TOKENS.has(clean)) return true;
+    const parts = clean.split(/[\s\-–—/→↔,()]+/).filter(Boolean);
+    return parts.length > 0 && parts.every((p) => CARDINAL_OR_ORDINAL_TOKENS.has(p));
+  }
+
   /**
    * Infers the cardinal direction vector { ux, uy, isElevation } from FromRoom -> ToRoom
    * using either `conn.label` or the negated `conn.reverseLabel`.
@@ -807,11 +843,17 @@
       };
     };
 
-    const hasReverse = conn.bidirectional && conn.reverseLabel && conn.reverseLabel.trim() !== "";
+    const showFrom =
+      Boolean(conn.label && conn.label.trim() !== "") &&
+      !isCardinalOrOrdinalOnlyLabel(conn.label);
+    const showTo =
+      Boolean(conn.bidirectional && conn.reverseLabel && conn.reverseLabel.trim() !== "") &&
+      !isCardinalOrOrdinalOnlyLabel(conn.reverseLabel);
+
     return {
       pathD,
-      fromLabelPos: hasReverse ? ptAt(0.28) : ptAt(0.5),
-      toLabelPos: hasReverse ? ptAt(0.74) : null,
+      fromLabelPos: showFrom ? (showTo ? ptAt(0.28) : ptAt(0.5)) : null,
+      toLabelPos: showTo ? (showFrom ? ptAt(0.74) : ptAt(0.5)) : null,
     };
   }
 
@@ -974,12 +1016,22 @@
       g.appendChild(hitPath);
       g.appendChild(visiblePath);
 
-      // Render Exit Label(s)
-      if (conn.label && geom.fromLabelPos) {
+      // Render Exit Label(s) (skip pure cardinal/ordinal directions on non-self-loops; Up/Down and custom labels are shown)
+      const isSelfLoop = conn.fromRoomId === conn.toRoomId;
+      if (
+        conn.label &&
+        geom.fromLabelPos &&
+        (isSelfLoop || !isCardinalOrOrdinalOnlyLabel(conn.label))
+      ) {
         const prefix = !conn.bidirectional ? "→ " : "";
         renderSvgLabelBadge(g, geom.fromLabelPos.x, geom.fromLabelPos.y, prefix + conn.label);
       }
-      if (conn.bidirectional && conn.reverseLabel && geom.toLabelPos) {
+      if (
+        conn.bidirectional &&
+        conn.reverseLabel &&
+        geom.toLabelPos &&
+        !isCardinalOrOrdinalOnlyLabel(conn.reverseLabel)
+      ) {
         renderSvgLabelBadge(g, geom.toLabelPos.x, geom.toLabelPos.y, conn.reverseLabel);
       }
 
