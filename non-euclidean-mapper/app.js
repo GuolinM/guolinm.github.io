@@ -424,22 +424,47 @@
     const clean = label.trim().toLowerCase();
     if (!clean) return null;
 
-    // Check diagonals first so "northeast" doesn't match "north"
-    if (clean.includes("northeast") || clean.includes("north-east") || clean === "ne") {
-      return { ux: 1, uy: -1 };
+    const firstToken = clean.split(/[\s\-–—/→↔,()]+/)[0];
+
+    // Check ordinal / diagonal directions first so "northeast" doesn't match "north"
+    if (
+      firstToken === "ne" ||
+      firstToken === "northeast" ||
+      clean.startsWith("northeast") ||
+      clean.startsWith("north-east") ||
+      clean.startsWith("north east")
+    ) {
+      return { ux: 1, uy: -1, isElevation: false };
     }
-    if (clean.includes("northwest") || clean.includes("north-west") || clean === "nw") {
-      return { ux: -1, uy: -1 };
+    if (
+      firstToken === "nw" ||
+      firstToken === "northwest" ||
+      clean.startsWith("northwest") ||
+      clean.startsWith("north-west") ||
+      clean.startsWith("north west")
+    ) {
+      return { ux: -1, uy: -1, isElevation: false };
     }
-    if (clean.includes("southeast") || clean.includes("south-east") || clean === "se") {
-      return { ux: 1, uy: 1 };
+    if (
+      firstToken === "se" ||
+      firstToken === "southeast" ||
+      clean.startsWith("southeast") ||
+      clean.startsWith("south-east") ||
+      clean.startsWith("south east")
+    ) {
+      return { ux: 1, uy: 1, isElevation: false };
     }
-    if (clean.includes("southwest") || clean.includes("south-west") || clean === "sw") {
-      return { ux: -1, uy: 1 };
+    if (
+      firstToken === "sw" ||
+      firstToken === "southwest" ||
+      clean.startsWith("southwest") ||
+      clean.startsWith("south-west") ||
+      clean.startsWith("south west")
+    ) {
+      return { ux: -1, uy: 1, isElevation: false };
     }
 
-    // Match primary direction at start of string (also handles "South - North" -> South from origin)
-    const firstToken = clean.split(/[\s\-–—/→↔,()]+/)[0];
+    // Match primary cardinal direction at start of string (also handles "South - North" -> South from origin)
     if (firstToken === "n" || firstToken === "north" || clean.startsWith("north")) {
       return { ux: 0, uy: -1, isElevation: false };
     }
@@ -639,17 +664,32 @@
               b.vx -= corrX;
             }
           } else {
-            // Diagonal cardinal (NE, NW, SE, SW)
+            // Ordinal / Diagonal directions (NE, NW, SE, SW):
+            // Placed at taxicab grid distance: 1 full E/W step (STEP_X) + 1 full N/S step (STEP_Y)
+            // (and allowed to lengthen along the diagonal ray if intermediate rooms sit in between).
             const projX = (b.x - a.x) * dir.ux;
             const projY = (b.y - a.y) * dir.uy;
-            const rateX = projX < STEP_X ? 0.2 : 0.03;
-            const rateY = projY < STEP_Y ? 0.2 : 0.03;
+
+            // Enforce minimum 1 grid step on both X and Y axes
+            const rateX = projX < STEP_X ? 0.24 : 0.025;
+            const rateY = projY < STEP_Y ? 0.24 : 0.025;
             const corrX = (STEP_X - projX) * dir.ux * rateX;
             const corrY = (STEP_Y - projY) * dir.uy * rateY;
             a.vx -= corrX;
             b.vx += corrX;
             a.vy -= corrY;
             b.vy += corrY;
+
+            // Lock to the diagonal grid ray so (projX / STEP_X) ≈ (projY / STEP_Y) when lengthened
+            if (projX > 0 && projY > 0) {
+              const gridStepsAvg = 0.5 * (projX / STEP_X + projY / STEP_Y);
+              const diagErrX = (gridStepsAvg * STEP_X - projX) * dir.ux * 0.14;
+              const diagErrY = (gridStepsAvg * STEP_Y - projY) * dir.uy * 0.14;
+              a.vx -= diagErrX;
+              b.vx += diagErrX;
+              a.vy -= diagErrY;
+              b.vy += diagErrY;
+            }
           }
         } else {
           // Normal connection WITHOUT a cardinal direction label:
@@ -2608,6 +2648,25 @@
       saveStateToLocal();
     });
 
+    const isStandardPresetLabel = (val) => {
+      if (!val) return true;
+      const std = new Set([
+        "north",
+        "south",
+        "east",
+        "west",
+        "northeast",
+        "northwest",
+        "southeast",
+        "southwest",
+        "up",
+        "down",
+        "warp",
+        "portal",
+      ]);
+      return std.has(val.trim().toLowerCase());
+    };
+
     // Preset chips in Connection Inspector
     document
       .querySelectorAll('[data-target="edit-conn-label"] .chip-btn')
@@ -2617,7 +2676,7 @@
           if (!conn) return;
           pushUndoSnapshot();
           conn.label = btn.getAttribute("data-val") || "";
-          if (conn.bidirectional && !conn.reverseLabel) {
+          if (conn.bidirectional && isStandardPresetLabel(conn.reverseLabel)) {
             conn.reverseLabel = btn.getAttribute("data-rev") || "";
           }
           if (conn.label === "Warp") conn.style = "warp";
@@ -2652,7 +2711,7 @@
         document.getElementById("branch-exit-label").value =
           btn.getAttribute("data-val") || "";
         const revInput = document.getElementById("branch-return-label");
-        if (!revInput.value) {
+        if (isStandardPresetLabel(revInput.value)) {
           revInput.value = btn.getAttribute("data-rev") || "";
         }
       });
@@ -2773,7 +2832,7 @@
         const rev = btn.getAttribute("data-rev") || "";
         document.getElementById("new-conn-label").value = val;
         const revInput = document.getElementById("new-conn-reverse-label");
-        if (!revInput.value) revInput.value = rev;
+        if (isStandardPresetLabel(revInput.value)) revInput.value = rev;
         if (val === "Portal") {
           connModalState.style = "warp";
           renderConnectionModalUI();
