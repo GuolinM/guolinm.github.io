@@ -27,6 +27,41 @@
     "#64748b", // Slate
   ];
 
+  function normalizeHexColor(val) {
+    if (!val || typeof val !== "string") return null;
+    let clean = val.trim().replace(/^#/, "");
+    if (/^[0-9a-fA-F]{3}$/.test(clean)) {
+      clean = clean
+        .split("")
+        .map((ch) => ch + ch)
+        .join("");
+    }
+    if (/^[0-9a-fA-F]{6}$/.test(clean)) {
+      return "#" + clean.toLowerCase();
+    }
+    return null;
+  }
+
+  function getAvailableRoomColors(extraColor = null) {
+    const seen = new Set();
+    const list = [];
+    const addColor = (c) => {
+      const norm = normalizeHexColor(c);
+      if (norm && !seen.has(norm)) {
+        seen.add(norm);
+        list.push(norm);
+      }
+    };
+    ROOM_COLORS.forEach(addColor);
+    if (appState && Array.isArray(appState.rooms)) {
+      for (const r of appState.rooms) {
+        if (r && r.color) addColor(r.color);
+      }
+    }
+    if (extraColor) addColor(extraColor);
+    return list;
+  }
+
   // ==================== APPLICATION STATE ====================
   let appState = createEmptyMapState();
   let undoStack = [];
@@ -405,23 +440,17 @@
 
     // Match primary direction at start of string (also handles "South - North" -> South from origin)
     const firstToken = clean.split(/[\s\-–—/→↔,()]+/)[0];
-    if (
-      firstToken === "n" ||
-      firstToken === "north" ||
-      clean.startsWith("north") ||
-      firstToken === "up" ||
-      clean.includes("stairs up")
-    ) {
-      return { ux: 0, uy: -1 };
+    if (firstToken === "n" || firstToken === "north" || clean.startsWith("north")) {
+      return { ux: 0, uy: -1, isElevation: false };
     }
-    if (
-      firstToken === "s" ||
-      firstToken === "south" ||
-      clean.startsWith("south") ||
-      firstToken === "down" ||
-      clean.includes("stairs down")
-    ) {
-      return { ux: 0, uy: 1 };
+    if (firstToken === "up" || firstToken === "u" || clean.includes("stairs up")) {
+      return { ux: 0, uy: -1, isElevation: true };
+    }
+    if (firstToken === "s" || firstToken === "south" || clean.startsWith("south")) {
+      return { ux: 0, uy: 1, isElevation: false };
+    }
+    if (firstToken === "down" || firstToken === "d" || clean.includes("stairs down")) {
+      return { ux: 0, uy: 1, isElevation: true };
     }
     if (
       firstToken === "e" ||
@@ -429,7 +458,7 @@
       clean.startsWith("east") ||
       firstToken === "right"
     ) {
-      return { ux: 1, uy: 0 };
+      return { ux: 1, uy: 0, isElevation: false };
     }
     if (
       firstToken === "w" ||
@@ -437,13 +466,13 @@
       clean.startsWith("west") ||
       firstToken === "left"
     ) {
-      return { ux: -1, uy: 0 };
+      return { ux: -1, uy: 0, isElevation: false };
     }
     return null;
   }
 
   /**
-   * Infers the cardinal direction vector { ux, uy } from FromRoom -> ToRoom
+   * Infers the cardinal direction vector { ux, uy, isElevation } from FromRoom -> ToRoom
    * using either `conn.label` or the negated `conn.reverseLabel`.
    */
   function getConnectionCardinalDirection(conn) {
@@ -453,7 +482,7 @@
     if (conn.bidirectional && conn.reverseLabel) {
       const rev = parseCardinalVector(conn.reverseLabel);
       if (rev) {
-        return { ux: -rev.ux, uy: -rev.uy };
+        return { ux: -rev.ux, uy: -rev.uy, isElevation: Boolean(rev.isElevation) };
       }
     }
     return null;
@@ -571,10 +600,13 @@
           // Cardinal connection: strictly align orthogonal axis, and enforce minimum step along cardinal axis
           // while allowing the cardinal axis to lengthen if other rooms are in between!
           if (dir.ux === 0 && dir.uy !== 0) {
-            // North / South connection: lock X axis strongly
+            // North / South (or Up / Down) connection:
+            // Explicit North/South locks X axis strongly (0.26); Up/Down uses a slightly softer X lock (0.11)
+            // so if a room has BOTH North and Up exits, North wins the direct vertical column while Up still stays strictly above!
+            const xLockStrength = dir.isElevation ? 0.11 : 0.26;
             const errX = b.x - a.x;
-            a.vx += errX * 0.24;
-            b.vx -= errX * 0.24;
+            a.vx += errX * xLockStrength;
+            b.vx -= errX * xLockStrength;
 
             // Along Y: b.y - a.y should be in direction `dir.uy` with magnitude >= STEP_Y
             const projY = (b.y - a.y) * dir.uy;
@@ -1431,14 +1463,17 @@
         descInput.value = selectedRoom.description || "";
       }
 
-      // Color swatches
+      // Color swatches (including any custom hex colors used across rooms)
       const colorsWrap = document.getElementById("edit-room-colors");
       colorsWrap.innerHTML = "";
-      for (const c of ROOM_COLORS) {
+      const activeRoomColor = normalizeHexColor(selectedRoom.color) || ROOM_COLORS[0];
+      const availableColors = getAvailableRoomColors(activeRoomColor);
+      for (const c of availableColors) {
         const sw = document.createElement("button");
         sw.type = "button";
-        sw.className = "color-swatch" + (selectedRoom.color === c ? " active" : "");
+        sw.className = "color-swatch" + (activeRoomColor === c ? " active" : "");
         sw.style.background = c;
+        sw.title = c;
         sw.addEventListener("click", () => {
           pushUndoSnapshot();
           selectedRoom.color = c;
@@ -1446,6 +1481,15 @@
           renderAll();
         });
         colorsWrap.appendChild(sw);
+      }
+
+      const editColorPicker = document.getElementById("edit-room-color-picker");
+      if (editColorPicker && document.activeElement !== editColorPicker) {
+        editColorPicker.value = activeRoomColor;
+      }
+      const editHexInput = document.getElementById("edit-room-hex-input");
+      if (editHexInput && document.activeElement !== editHexInput) {
+        editHexInput.value = activeRoomColor;
       }
 
       // Editable tags list
@@ -1633,23 +1677,31 @@
       branchBox.classList.add("hidden");
     }
 
-    // Render color swatches
-    const swatchContainer = document.getElementById("new-room-colors");
-    swatchContainer.innerHTML = "";
-    for (const c of ROOM_COLORS) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "color-swatch" + (newRoomColor === c ? " active" : "");
-      btn.style.background = c;
-      btn.addEventListener("click", () => {
-        newRoomColor = c;
-        swatchContainer
-          .querySelectorAll(".color-swatch")
-          .forEach((el) => el.classList.remove("active"));
-        btn.classList.add("active");
-      });
-      swatchContainer.appendChild(btn);
-    }
+    // Render color swatches (including any custom hex colors used across rooms)
+    const renderNewRoomSwatches = () => {
+      const swatchContainer = document.getElementById("new-room-colors");
+      swatchContainer.innerHTML = "";
+      const normNew = normalizeHexColor(newRoomColor) || ROOM_COLORS[0];
+      newRoomColor = normNew;
+      const availableColors = getAvailableRoomColors(normNew);
+      for (const c of availableColors) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "color-swatch" + (normNew === c ? " active" : "");
+        btn.style.background = c;
+        btn.title = c;
+        btn.addEventListener("click", () => {
+          newRoomColor = c;
+          renderNewRoomSwatches();
+        });
+        swatchContainer.appendChild(btn);
+      }
+      const newColorPicker = document.getElementById("new-room-color-picker");
+      if (newColorPicker) newColorPicker.value = normNew;
+      const newHexInput = document.getElementById("new-room-hex-input");
+      if (newHexInput && document.activeElement !== newHexInput) newHexInput.value = normNew;
+    };
+    renderNewRoomSwatches();
 
     // Existing tag suggestions
     const existingTagsWrap = document.getElementById("new-room-existing-tags");
@@ -2380,6 +2432,79 @@
       if (e.key === "Enter") {
         e.preventDefault();
         addTagToSelectedRoom();
+      }
+    });
+
+    // Hex Color Input & Color Wheel in Room Inspector
+    const applyHexToSelectedRoom = (rawColor) => {
+      const room = getRoomById(selectedRoomId);
+      if (!room) return;
+      const norm = normalizeHexColor(rawColor);
+      if (!norm) {
+        showToast("Enter a valid hex color like #38bdf8 or #f59e0b");
+        return;
+      }
+      if (room.color !== norm) {
+        pushUndoSnapshot();
+        room.color = norm;
+        saveStateToLocal();
+      }
+      renderAll();
+    };
+
+    document.getElementById("edit-room-color-picker").addEventListener("input", (e) => {
+      applyHexToSelectedRoom(e.target.value);
+    });
+    document.getElementById("btn-edit-apply-hex").addEventListener("click", () => {
+      applyHexToSelectedRoom(document.getElementById("edit-room-hex-input").value);
+    });
+    document.getElementById("edit-room-hex-input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        applyHexToSelectedRoom(e.target.value);
+      }
+    });
+
+    // Hex Color Input & Color Wheel in Add Room Modal
+    const applyHexToNewRoomModal = (rawColor) => {
+      const norm = normalizeHexColor(rawColor);
+      if (!norm) {
+        showToast("Enter a valid hex color like #38bdf8 or #f59e0b");
+        return;
+      }
+      newRoomColor = norm;
+      const newColorPicker = document.getElementById("new-room-color-picker");
+      if (newColorPicker) newColorPicker.value = norm;
+      const newHexInput = document.getElementById("new-room-hex-input");
+      if (newHexInput) newHexInput.value = norm;
+
+      const swatchContainer = document.getElementById("new-room-colors");
+      if (swatchContainer) {
+        swatchContainer.innerHTML = "";
+        for (const c of getAvailableRoomColors(norm)) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "color-swatch" + (norm === c ? " active" : "");
+          btn.style.background = c;
+          btn.title = c;
+          btn.addEventListener("click", () => {
+            applyHexToNewRoomModal(c);
+          });
+          swatchContainer.appendChild(btn);
+        }
+      }
+    };
+
+    document.getElementById("new-room-color-picker").addEventListener("input", (e) => {
+      applyHexToNewRoomModal(e.target.value);
+    });
+    document.getElementById("btn-new-apply-hex").addEventListener("click", () => {
+      applyHexToNewRoomModal(document.getElementById("new-room-hex-input").value);
+    });
+    document.getElementById("new-room-hex-input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        applyHexToNewRoomModal(e.target.value);
       }
     });
 

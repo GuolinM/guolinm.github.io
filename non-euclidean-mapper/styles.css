@@ -987,6 +987,41 @@ textarea {
   box-shadow: 0 0 0 2px var(--primary);
 }
 
+.hex-color-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.color-wheel-input {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.color-wheel-input::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.color-wheel-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 4px;
+}
+
+.hex-text-input {
+  width: 96px !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 12px !important;
+  padding: 4px 8px !important;
+  text-transform: lowercase;
+}
+
 .tag-input-row {
   display: flex;
   gap: 6px;
