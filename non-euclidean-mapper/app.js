@@ -822,8 +822,24 @@
       pairBuckets.get(key).push(conn);
     }
 
-    // 1. Render Connections
-    for (const conn of appState.connections) {
+    // 1. Render Connections (Warps always rendered below everything else)
+    const sortedConnections = [...appState.connections].sort((a, b) => {
+      const getLayerRank = (c) => {
+        if (!isNestedPicker && selectedConnectionId === c.id) return 3;
+        if (c.style !== "warp") return 2;
+        if (
+          !isNestedPicker &&
+          selectedRoomId &&
+          (c.fromRoomId === selectedRoomId || c.toRoomId === selectedRoomId)
+        ) {
+          return 1;
+        }
+        return 0;
+      };
+      return getLayerRank(a) - getLayerRank(b);
+    });
+
+    for (const conn of sortedConnections) {
       const fromRoom = getRoomById(conn.fromRoomId);
       const toRoom = getRoomById(conn.toRoomId);
       if (!fromRoom || !toRoom) continue;
@@ -840,9 +856,15 @@
       const geom = computeConnectionGeometry(conn, effectiveIndex, siblings.length);
 
       const isSelected = !isNestedPicker && selectedConnectionId === conn.id;
+      const isAttachedToSelectedRoom =
+        !isNestedPicker &&
+        Boolean(selectedRoomId) &&
+        (conn.fromRoomId === selectedRoomId || conn.toRoomId === selectedRoomId);
+
       const classes = ["conn-group"];
       if (!conn.bidirectional) classes.push("oneway");
       if (conn.style === "warp") classes.push("warp");
+      if (isAttachedToSelectedRoom) classes.push("connected-to-selected");
       if (isSelected) classes.push("selected");
 
       const g = createSvgEl("g", { class: classes.join(" "), "data-conn-id": conn.id });
@@ -2677,7 +2699,7 @@
 
       appState.connections.push(newConn);
       closeAddConnectionModal();
-      selectConnection(newConn.id);
+      selectRoom(newConn.fromRoomId);
       saveStateToLocal();
       renderAll();
       showToast("Added connection");

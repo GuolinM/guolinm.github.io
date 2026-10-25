@@ -559,6 +559,20 @@ html, body {
 /* SVG Map Nodes & Edges */
 .conn-group {
   cursor: pointer;
+  transition: opacity 0.16s ease;
+}
+
+.conn-group.warp {
+  opacity: 0.3;
+}
+
+.conn-group.warp.connected-to-selected {
+  opacity: 0.72;
+}
+
+.conn-group.warp:hover,
+.conn-group.warp.selected {
+  opacity: 1;
 }
 
 .conn-hit-area {
