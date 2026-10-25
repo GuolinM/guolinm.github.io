@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Non-Euclidean Mapper</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Top Toolbar -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon" title="Non-Euclidean Game Mapper">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+        </div>
+        <input
+          id="map-title-input"
+          class="map-title-input"
+          type="text"
+          value="Untitled Map"
+          aria-label="Map Title"
+          title="Click to rename map"
+        />
+      </div>
+
+      <div class="toolbar-primary">
+        <button id="btn-add-room" class="btn btn-primary" title="Add a new room (Shortcut: N or Double-click map)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Add Room <kbd>N</kbd>
+        </button>
+
+        <button id="btn-add-connection" class="btn btn-accent" title="Connect two rooms via list or nested visual map (Shortcut: C)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+          </svg>
+          Add Connection <kbd>C</kbd>
+        </button>
+
+        <div class="toolbar-divider"></div>
+
+        <button id="btn-undo" class="btn btn-ghost" title="Undo last change (Ctrl+Z)" disabled>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 7v6h6"></path>
+            <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
+          </svg>
+          Undo
+        </button>
+
+        <button id="btn-auto-arrange" class="btn btn-ghost" title="Gently rearrange map layout (Undoable)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+            <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+            <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+            <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+          </svg>
+          Rearrange
+        </button>
+      </div>
+
+      <div class="toolbar-right">
+        <div id="autosave-indicator" class="autosave-pill" title="Automatic local save & rolling backups enabled">
+          <span class="status-dot"></span>
+          <span id="autosave-text">Saved</span>
+        </div>
+
+        <button id="btn-backups" class="btn btn-ghost" title="View autosave history & backups">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          Backups
+        </button>
+
+        <div class="dropdown">
+          <button id="btn-file-menu" class="btn btn-secondary">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            File / Export
+          </button>
+          <div id="file-dropdown-menu" class="dropdown-menu hidden">
+            <button id="menu-export-yaml" class="dropdown-item">
+              <span>Save as YAML (<code>.yaml</code>)</span>
+              <small>Human-readable</small>
+            </button>
+            <button id="menu-export-json" class="dropdown-item">
+              <span>Save as JSON (<code>.json</code>)</span>
+              <small>Standard data</small>
+            </button>
+            <div class="dropdown-sep"></div>
+            <button id="menu-import-file" class="dropdown-item">
+              <span>Load Map File (<code>.yaml</code> / <code>.json</code>)</span>
+            </button>
+            <div class="dropdown-sep"></div>
+            <button id="menu-load-demo" class="dropdown-item">
+              <span>Load Demo Non-Euclidean Map</span>
+            </button>
+            <button id="menu-clear-map" class="dropdown-item danger">
+              <span>New Empty Map</span>
+            </button>
+          </div>
+        </div>
+        <input id="file-import-input" type="file" accept=".yaml,.yml,.json" class="hidden" />
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="workspace">
+      <!-- Left Sidebar: Search & Filter by Tag or Name (Priority 4) -->
+      <aside id="left-sidebar" class="sidebar sidebar-left">
+        <div class="sidebar-header">
+          <h2>Rooms &amp; Search</h2>
+          <span id="room-count-badge" class="badge">0</span>
+        </div>
+
+        <div class="search-box-wrap">
+          <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            id="search-input"
+            type="text"
+            placeholder="Search rooms by name, tag, notes... (/)"
+            autocomplete="off"
+          />
+          <button id="btn-clear-search" class="icon-btn hidden" title="Clear search">&times;</button>
+        </div>
+
+        <div class="tag-filter-section">
+          <div class="section-label-row">
+            <span class="section-label">Filter by Tag</span>
+            <button id="btn-clear-tag-filter" class="link-btn hidden">Clear</button>
+          </div>
+          <div id="tag-filter-list" class="tag-chip-list">
+            <span class="muted-hint">No tags yet</span>
+          </div>
+        </div>
+
+        <div id="room-search-results" class="room-list" role="listbox" aria-label="Rooms list">
+          <!-- Populated dynamically -->
+        </div>
+      </aside>
+
+      <!-- Center: Interactive Draggable Map Canvas (Priority 1) -->
+      <main id="map-container" class="map-container">
+        <svg id="map-svg" class="map-svg" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <!-- Grid pattern -->
+            <pattern id="minor-grid" width="32" height="32" patternUnits="userSpaceOnUse">
+              <path d="M 32 0 L 0 0 0 32" fill="none" stroke="rgba(148, 163, 184, 0.07)" stroke-width="1" />
+            </pattern>
+            <pattern id="major-grid" width="160" height="160" patternUnits="userSpaceOnUse">
+              <rect width="160" height="160" fill="url(#minor-grid)" />
+              <path d="M 160 0 L 0 0 0 160" fill="none" stroke="rgba(148, 163, 184, 0.14)" stroke-width="1" />
+            </pattern>
+
+            <!-- Arrowheads for connections -->
+            <marker id="arrow-oneway" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 1 2 L 10 6 L 1 10 z" fill="#f59e0b" />
+            </marker>
+            <marker id="arrow-oneway-warp" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 1 2 L 10 6 L 1 10 z" fill="#c084fc" />
+            </marker>
+            <marker id="arrow-twoway" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M 2 2.5 L 9.5 6 L 2 9.5 z" fill="#64748b" />
+            </marker>
+            <marker id="arrow-twoway-warp" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M 2 2.5 L 9.5 6 L 2 9.5 z" fill="#a855f7" />
+            </marker>
+            <marker id="arrow-selected" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 1 2 L 10 6 L 1 10 z" fill="#38bdf8" />
+            </marker>
+          </defs>
+
+          <!-- Infinite background grid -->
+          <rect id="grid-bg" width="100%" height="100%" fill="url(#major-grid)" />
+
+          <!-- Pan & Zoom Viewport Group -->
+          <g id="map-viewport">
+            <g id="connections-layer"></g>
+            <g id="rooms-layer"></g>
+          </g>
+        </svg>
+
+        <!-- Empty State Overlay -->
+        <div id="map-empty-state" class="map-empty-state hidden">
+          <div class="empty-card">
+            <h3>Start Mapping Your World</h3>
+            <p>Double-click anywhere on the map or press <kbd>N</kbd> to place your first room.</p>
+            <div class="empty-actions">
+              <button id="btn-empty-add-room" class="btn btn-primary">+ Add First Room</button>
+              <button id="btn-empty-load-demo" class="btn btn-secondary">Load Demo Non-Euclidean Map</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Map Legend & Bottom Controls -->
+        <div class="map-hud-bottom-left">
+          <div class="legend-pill">
+            <span class="legend-item"><span class="legend-line twoway"></span> Two-way</span>
+            <span class="legend-item"><span class="legend-line oneway"></span> One-way</span>
+            <span class="legend-item"><span class="legend-line warp"></span> Warp / Portal</span>
+          </div>
+          <div class="map-hint-pill">
+            Drag canvas to pan • Scroll to zoom • Double-click canvas to add room • Drag rooms to position
+          </div>
+        </div>
+
+        <div class="map-hud-bottom-right">
+          <button id="btn-zoom-out" class="hud-btn" title="Zoom Out (-)">&minus;</button>
+          <span id="zoom-level-text" class="zoom-readout">100%</span>
+          <button id="btn-zoom-in" class="hud-btn" title="Zoom In (+)">+</button>
+          <button id="btn-zoom-fit" class="hud-btn" title="Center &amp; Fit Map (F)">Fit</button>
+        </div>
+      </main>
+
+      <!-- Right Sidebar: Room / Connection Inspector & Editor (Priority 2) -->
+      <aside id="right-sidebar" class="sidebar sidebar-right">
+        <!-- Empty Selection State -->
+        <div id="inspector-empty" class="inspector-placeholder">
+          <div class="placeholder-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+          </div>
+          <h3>Inspector</h3>
+          <p>Click any <strong>room</strong> or <strong>connection</strong> on the map to view and edit its details, tags, notes, and exits.</p>
+          <div class="quick-tips">
+            <div><kbd>N</kbd> Add new room</div>
+            <div><kbd>C</kbd> Add connection</div>
+            <div><kbd>/</kbd> Search rooms &amp; tags</div>
+            <div><kbd>Del</kbd> Delete selected</div>
+          </div>
+        </div>
+
+        <!-- Room Inspector Form -->
+        <div id="inspector-room" class="inspector-content hidden">
+          <div class="sidebar-header">
+            <h2>Edit Room</h2>
+            <div class="header-actions">
+              <button id="btn-center-selected-room" class="btn btn-xs btn-ghost" title="Center camera on this room">Center</button>
+              <button id="btn-close-inspector" class="icon-btn" title="Deselect (Esc)">&times;</button>
+            </div>
+          </div>
+
+          <div class="inspector-body">
+            <div class="form-group">
+              <label for="edit-room-name">Room Name</label>
+              <input id="edit-room-name" type="text" placeholder="e.g. Grand Foyer" />
+            </div>
+
+            <div class="form-group">
+              <label>Room Color</label>
+              <div id="edit-room-colors" class="color-swatch-row"></div>
+            </div>
+
+            <div class="form-group">
+              <label for="edit-room-tags-input">Tags</label>
+              <div id="edit-room-tags-list" class="tag-chip-list editable-tags"></div>
+              <div class="tag-input-row">
+                <input id="edit-room-tags-input" type="text" placeholder="Add tag (Enter)..." list="existing-tags-datalist" />
+                <button id="btn-edit-add-tag" class="btn btn-secondary btn-sm" type="button">Add</button>
+              </div>
+              <datalist id="existing-tags-datalist"></datalist>
+            </div>
+
+            <div class="form-group">
+              <label for="edit-room-desc">Description &amp; Notes</label>
+              <textarea id="edit-room-desc" rows="4" placeholder="Clues, locked doors, landmarks, puzzles..."></textarea>
+            </div>
+
+            <!-- Quick Branching: Add a new room connected to this room -->
+            <div class="inspector-card">
+              <div class="card-title-row">
+                <h4>Quick Explore from Here</h4>
+              </div>
+              <p class="card-subtext">Walked through an exit? Create &amp; connect a new or existing room:</p>
+              <div class="quick-actions-row">
+                <button id="btn-branch-new-room" class="btn btn-primary btn-sm full-width">
+                  + New Connected Room
+                </button>
+                <button id="btn-connect-from-here" class="btn btn-accent btn-sm full-width">
+                  Link Existing Room...
+                </button>
+              </div>
+            </div>
+
+            <!-- Connections list for this room -->
+            <div class="form-group">
+              <div class="section-label-row">
+                <label>Connections (<span id="inspector-conn-count">0</span>)</label>
+              </div>
+              <div id="inspector-connections-list" class="inspector-conn-list"></div>
+            </div>
+
+            <div class="inspector-footer">
+              <button id="btn-delete-room" class="btn btn-danger btn-sm full-width">Delete Room</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Connection Inspector Form -->
+        <div id="inspector-connection" class="inspector-content hidden">
+          <div class="sidebar-header">
+            <h2>Edit Connection</h2>
+            <button id="btn-close-conn-inspector" class="icon-btn" title="Deselect (Esc)">&times;</button>
+          </div>
+
+          <div class="inspector-body">
+            <div class="conn-endpoints-box">
+              <div class="endpoint-row">
+                <span class="endpoint-badge">From</span>
+                <button id="conn-inspect-from-btn" class="endpoint-room-link"></button>
+              </div>
+              <div class="endpoint-arrow-row">
+                <span id="conn-inspect-dir-icon">↔</span>
+                <button id="btn-reverse-conn-dir" class="btn btn-xs btn-ghost" title="Swap From and To rooms">Swap Ends</button>
+              </div>
+              <div class="endpoint-row">
+                <span class="endpoint-badge">To</span>
+                <button id="conn-inspect-to-btn" class="endpoint-room-link"></button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Directionality</label>
+              <div class="segmented-control">
+                <button id="edit-conn-twoway" type="button" class="seg-btn active">↔ Two-Way</button>
+                <button id="edit-conn-oneway" type="button" class="seg-btn">→ One-Way Only</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Passage Style</label>
+              <div class="segmented-control">
+                <button id="edit-conn-style-normal" type="button" class="seg-btn active">Normal Corridor</button>
+                <button id="edit-conn-style-warp" type="button" class="seg-btn">✦ Warp / Teleport</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="edit-conn-label">Exit Label (From → To)</label>
+              <input id="edit-conn-label" type="text" placeholder="e.g. North, Red Door, Hole..." />
+              <div class="preset-chips" data-target="edit-conn-label">
+                <button type="button" class="chip-btn" data-val="North" data-rev="South">N</button>
+                <button type="button" class="chip-btn" data-val="South" data-rev="North">S</button>
+                <button type="button" class="chip-btn" data-val="East" data-rev="West">E</button>
+                <button type="button" class="chip-btn" data-val="West" data-rev="East">W</button>
+                <button type="button" class="chip-btn" data-val="Up" data-rev="Down">Up</button>
+                <button type="button" class="chip-btn" data-val="Down" data-rev="Up">Down</button>
+                <button type="button" class="chip-btn" data-val="Warp" data-rev="Warp">Warp</button>
+              </div>
+            </div>
+
+            <div id="edit-conn-reverse-group" class="form-group">
+              <label for="edit-conn-reverse-label">Return Label (To → From, optional)</label>
+              <input id="edit-conn-reverse-label" type="text" placeholder="e.g. South, Stairs Down..." />
+            </div>
+
+            <div class="form-group">
+              <label for="edit-conn-notes">Connection Notes</label>
+              <textarea id="edit-conn-notes" rows="3" placeholder="e.g. Requires Blue Key, warps when looking away..."></textarea>
+            </div>
+
+            <div class="inspector-footer">
+              <button id="btn-delete-connection" class="btn btn-danger btn-sm full-width">Delete Connection</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- MODAL 1: Add Room (Priority 2) -->
+    <div id="modal-add-room" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-add-room-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="modal-add-room-title">Add New Room</h3>
+          <button id="btn-close-add-room" class="icon-btn">&times;</button>
+        </div>
+        <form id="form-add-room" class="modal-body">
+          <!-- Optional banner when branching from an existing room -->
+          <div id="branch-from-banner" class="info-banner hidden">
+            <span>Connecting from <strong id="branch-source-name"></strong></span>
+            <button id="btn-cancel-branch" type="button" class="link-btn">Don't connect</button>
+          </div>
+
+          <div class="form-group">
+            <label for="new-room-name">Room Name <span class="req">*</span></label>
+            <input id="new-room-name" type="text" placeholder="e.g. Mirror Hallway, Library, Cellar..." required />
+          </div>
+
+          <!-- Shown when branching from an existing room -->
+          <div id="branch-connection-fields" class="branch-fields-box hidden">
+            <div class="form-row-2">
+              <div class="form-group">
+                <label for="branch-exit-label">Exit Taken (From Source)</label>
+                <input id="branch-exit-label" type="text" placeholder="e.g. North, Blue Door..." />
+                <div class="preset-chips" id="branch-preset-chips">
+                  <button type="button" class="chip-btn" data-val="North" data-rev="South">N</button>
+                  <button type="button" class="chip-btn" data-val="South" data-rev="North">S</button>
+                  <button type="button" class="chip-btn" data-val="East" data-rev="West">E</button>
+                  <button type="button" class="chip-btn" data-val="West" data-rev="East">W</button>
+                  <button type="button" class="chip-btn" data-val="Up" data-rev="Down">Up</button>
+                  <button type="button" class="chip-btn" data-val="Down" data-rev="Up">Down</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="branch-return-label">Return Label (if Two-Way)</label>
+                <input id="branch-return-label" type="text" placeholder="e.g. South..." />
+                <div class="checkbox-row" style="margin-top: 8px;">
+                  <label class="checkbox-label">
+                    <input id="branch-is-twoway" type="checkbox" checked />
+                    Two-way connection
+                  </label>
+                  <label class="checkbox-label">
+                    <input id="branch-is-warp" type="checkbox" />
+                    Warp / Teleport
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Color Accent</label>
+            <div id="new-room-colors" class="color-swatch-row"></div>
+          </div>
+
+          <div class="form-group">
+            <label for="new-room-tags">Tags (comma-separated or click below)</label>
+            <input id="new-room-tags" type="text" placeholder="e.g. hub, puzzle, locked-door, save-point" />
+            <div id="new-room-existing-tags" class="preset-chips"></div>
+          </div>
+
+          <div class="form-group">
+            <label for="new-room-desc">Description / Notes (optional)</label>
+            <textarea id="new-room-desc" rows="3" placeholder="Items, symbols, puzzles, observations..."></textarea>
+          </div>
+
+          <div class="modal-footer">
+            <button id="btn-cancel-add-room" type="button" class="btn btn-ghost">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create Room</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL 2: Add Connection with Search List + Nested Visual Map Picker (Priority 3) -->
+    <div id="modal-add-connection" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-add-conn-title">
+      <div class="modal-card modal-wide">
+        <div class="modal-header">
+          <h3 id="modal-add-conn-title">Add Connection Between Rooms</h3>
+          <button id="btn-close-add-conn" class="icon-btn">&times;</button>
+        </div>
+
+        <form id="form-add-connection" class="modal-body conn-modal-grid">
+          <!-- Left Column: Endpoint Selection & Connection Settings -->
+          <div class="conn-config-col">
+            <!-- Endpoint selector slots -->
+            <div class="endpoint-selector-cards">
+              <div id="slot-from" class="endpoint-slot active" data-slot="from">
+                <div class="slot-header">
+                  <span class="slot-label">1. From Room (Origin)</span>
+                  <span class="slot-hint">Selecting...</span>
+                </div>
+                <div id="slot-from-value" class="slot-value empty">Click a room in the list or nested map →</div>
+              </div>
+
+              <div class="slot-swap-sep">
+                <button id="btn-swap-conn-slots" type="button" class="icon-btn" title="Swap From &amp; To rooms">⇅</button>
+              </div>
+
+              <div id="slot-to" class="endpoint-slot" data-slot="to">
+                <div class="slot-header">
+                  <span class="slot-label">2. To Room (Destination)</span>
+                  <span class="slot-hint">Click to pick</span>
+                </div>
+                <div id="slot-to-value" class="slot-value empty">Click a room in the list or nested map →</div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Connection Direction</label>
+              <div class="segmented-control">
+                <button id="new-conn-twoway" type="button" class="seg-btn active">↔ Two-Way (Default)</button>
+                <button id="new-conn-oneway" type="button" class="seg-btn">→ One-Way Trap / Warp</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Passage Style</label>
+              <div class="segmented-control">
+                <button id="new-conn-style-normal" type="button" class="seg-btn active">Normal Passage</button>
+                <button id="new-conn-style-warp" type="button" class="seg-btn">✦ Non-Euclidean Warp</button>
+              </div>
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-group">
+                <label for="new-conn-label">Exit Label (From → To)</label>
+                <input id="new-conn-label" type="text" placeholder="e.g. North, Red Door..." />
+                <div class="preset-chips" id="new-conn-presets">
+                  <button type="button" class="chip-btn" data-val="North" data-rev="South">N</button>
+                  <button type="button" class="chip-btn" data-val="South" data-rev="North">S</button>
+                  <button type="button" class="chip-btn" data-val="East" data-rev="West">E</button>
+                  <button type="button" class="chip-btn" data-val="West" data-rev="East">W</button>
+                  <button type="button" class="chip-btn" data-val="Up" data-rev="Down">Up</button>
+                  <button type="button" class="chip-btn" data-val="Down" data-rev="Up">Down</button>
+                  <button type="button" class="chip-btn" data-val="Portal" data-rev="Portal">Portal</button>
+                </div>
+              </div>
+
+              <div id="new-conn-reverse-group" class="form-group">
+                <label for="new-conn-reverse-label">Return Label (To → From)</label>
+                <input id="new-conn-reverse-label" type="text" placeholder="e.g. South (optional)" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="new-conn-notes">Notes (optional)</label>
+              <input id="new-conn-notes" type="text" placeholder="e.g. Teleports when walking backwards..." />
+            </div>
+          </div>
+
+          <!-- Right Column: Room Picker (Search List OR Nested Interactive Map!) -->
+          <div class="conn-picker-col">
+            <div class="picker-tabs-header">
+              <span class="picker-picking-indicator">
+                Picking: <strong id="picker-active-slot-label">From Room</strong>
+              </span>
+              <div class="segmented-control picker-mode-tabs">
+                <button id="tab-picker-map" type="button" class="seg-btn active">
+                  🗺️ Nested Visual Map
+                </button>
+                <button id="tab-picker-list" type="button" class="seg-btn">
+                  🔍 Search List
+                </button>
+              </div>
+            </div>
+
+            <!-- Filter input works for BOTH list and nested map highlighting! -->
+            <div class="picker-search-bar">
+              <input
+                id="conn-picker-search"
+                type="text"
+                placeholder="Search rooms by name or tag to filter/highlight..."
+                autocomplete="off"
+              />
+            </div>
+
+            <!-- Mode A: Nested Interactive Map Picker -->
+            <div id="picker-map-view" class="picker-map-container">
+              <svg id="nested-map-svg" class="nested-map-svg" xmlns="http://www.w3.org/2000/svg">
+                <rect width="100%" height="100%" fill="url(#minor-grid)" />
+                <g id="nested-map-viewport">
+                  <g id="nested-connections-layer"></g>
+                  <g id="nested-rooms-layer"></g>
+                </g>
+              </svg>
+              <div class="nested-map-hud">
+                <span>Click any room node to select it • Drag to pan • Scroll to zoom</span>
+                <button id="btn-nested-fit" type="button" class="btn btn-xs btn-secondary">Fit Map</button>
+              </div>
+            </div>
+
+            <!-- Mode B: Searchable Room List Picker -->
+            <div id="picker-list-view" class="picker-list-container hidden">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <div class="modal-footer full-span">
+            <div id="conn-validation-msg" class="validation-msg"></div>
+            <div class="footer-btns">
+              <button id="btn-cancel-add-conn" type="button" class="btn btn-ghost">Cancel</button>
+              <button id="btn-submit-add-conn" type="submit" class="btn btn-primary">Create Connection</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL 3: Autosave & Backups Manager (Priority 5) -->
+    <div id="modal-backups" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-backups-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="modal-backups-title">Autosave &amp; Rolling Backups</h3>
+          <button id="btn-close-backups" class="icon-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc">
+            Your map is saved automatically to your browser on every change. Rolling snapshots are kept below so you can restore an earlier state or download a backup at any time.
+          </p>
+          <div class="backup-create-row">
+            <input id="manual-backup-label" type="text" placeholder="Checkpoint label (e.g. Before Clocktower Puzzle)..." />
+            <button id="btn-create-checkpoint" class="btn btn-secondary btn-sm">Save Checkpoint</button>
+          </div>
+          <div id="backups-list" class="backups-list">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
