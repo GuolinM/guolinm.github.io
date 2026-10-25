@@ -37,8 +37,11 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
 ---
 
 ## 4. Confirmed Design Decisions
-1. **Connection Labels:** Freeform graph with optional exit labels (e.g., `'North'`, `'Red Door'`, `'Stairs Up'`) and quick directional presets, plus a toggle for two-way (default) vs. one-way and normal vs. warp/teleport styling.
-2. **Placement & Layout Stability:** Rooms stay pinned exactly where placed or spawned. When a new room is created or moved onto an existing room's space, only the colliding room is gently nudged to the nearest free spot. Includes an explicit **Auto-Arrange** action (with Undo support) if the user wants to tidy the graph.
+1. **Connection Labels & Translucent Warp Labels:** Freeform graph with optional exit labels (e.g., `'North'`, `'Red Door'`, `'Stairs Up'`) and quick directional presets, plus a toggle for two-way (default) vs. one-way and normal vs. warp/teleport styling. Warp connection labels render slightly translucent by default (`opacity: 0.65`) and become fully opaque on hover/selection so long-range warps don't clutter the map.
+2. **Placement, Layout Stability & Cardinal Auto-Arrange Priority:** Rooms stay pinned exactly where placed or spawned. When a new room is created or moved onto an existing room's space, only the colliding room is gently nudged to the nearest free spot. The explicit **Rearrange (`Auto-Arrange`)** action (with Undo support):
+   - Strictly prioritizes cardinal directions (`N/S/E/W`, `NE/NW/SE/SW`, inferred from either `label` or `reverseLabel`) by locking the orthogonal axis and allowing cardinal connections to lengthen along their axis (`1x`, `2x`, `3x` grid steps) as needed to accommodate rooms in between.
+   - Leaves **Warp / Teleport** connections unconstrained by distance so warps can span arbitrarily far across the map without distorting the local cardinal grid.
+   - Pulls unlabeled normal connections to a comfortable distance along their existing angle without forcing them East.
 3. **Deployment Format:** Zero-dependency static web app (`index.html`, `styles.css`, `app.js`) that works both by double-clicking `index.html` (or the bundled `dist/non-euclidean-mapper.html`) locally on Windows and by pushing to **GitHub Pages** (`https://guolinm.github.io/non-euclidean-mapper/`).
 
 ---

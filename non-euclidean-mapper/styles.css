@@ -596,14 +596,23 @@ html, body {
 }
 
 .conn-label-bg {
-  fill: #0f172a;
+  fill: rgba(15, 23, 42, 0.88);
   stroke: #334155;
   stroke-width: 1px;
   rx: 4px;
+  transition: opacity 0.15s ease, fill 0.15s ease, stroke 0.15s ease;
+}
+
+.conn-group.warp .conn-label-bg {
+  fill: rgba(15, 23, 42, 0.48);
+  stroke: rgba(168, 85, 247, 0.45);
+  opacity: 0.65;
 }
 
 .conn-group.selected .conn-label-bg {
   stroke: #38bdf8;
+  fill: rgba(15, 23, 42, 0.96);
+  opacity: 1;
 }
 
 .conn-label-text {
@@ -613,6 +622,24 @@ html, body {
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
+  transition: opacity 0.15s ease, fill 0.15s ease;
+}
+
+.conn-group.warp .conn-label-text {
+  fill: rgba(233, 213, 255, 0.72);
+}
+
+.conn-group.warp:hover .conn-label-bg,
+.conn-group.warp.selected .conn-label-bg {
+  fill: rgba(15, 23, 42, 0.94);
+  stroke: #c084fc;
+  opacity: 1;
+}
+
+.conn-group.warp:hover .conn-label-text,
+.conn-group.warp.selected .conn-label-text {
+  fill: #f3e8ff;
+  opacity: 1;
 }
 
 /* Room Nodes on SVG */

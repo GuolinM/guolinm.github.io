@@ -381,36 +381,116 @@
   }
 
   /**
-   * Computes an ideal spawn position when branching from an existing room based on the exit label
+   * Parses a label string into a unit cardinal vector { ux, uy } if it contains a directional keyword.
+   * Returns null if no cardinal direction is recognized.
    */
-  function getDirectionalOffsetFromLabel(label = "") {
+  function parseCardinalVector(label = "") {
+    if (!label) return null;
     const clean = label.trim().toLowerCase();
-    if (clean === "n" || clean.startsWith("north") || clean === "up" || clean.includes("stairs up")) {
-      return { dx: 0, dy: -165 };
+    if (!clean) return null;
+
+    // Check diagonals first so "northeast" doesn't match "north"
+    if (clean.includes("northeast") || clean.includes("north-east") || clean === "ne") {
+      return { ux: 1, uy: -1 };
     }
-    if (clean === "s" || clean.startsWith("south") || clean === "down" || clean.includes("stairs down")) {
-      return { dx: 0, dy: 165 };
+    if (clean.includes("northwest") || clean.includes("north-west") || clean === "nw") {
+      return { ux: -1, uy: -1 };
     }
-    if (clean === "e" || clean.startsWith("east") || clean === "right") {
-      return { dx: 255, dy: 0 };
+    if (clean.includes("southeast") || clean.includes("south-east") || clean === "se") {
+      return { ux: 1, uy: 1 };
     }
-    if (clean === "w" || clean.startsWith("west") || clean === "left") {
-      return { dx: -255, dy: 0 };
+    if (clean.includes("southwest") || clean.includes("south-west") || clean === "sw") {
+      return { ux: -1, uy: 1 };
     }
-    if (clean.includes("northeast") || clean === "ne") return { dx: 230, dy: -150 };
-    if (clean.includes("northwest") || clean === "nw") return { dx: -230, dy: -150 };
-    if (clean.includes("southeast") || clean === "se") return { dx: 230, dy: 150 };
-    if (clean.includes("southwest") || clean === "sw") return { dx: -230, dy: 150 };
-    return { dx: 255, dy: 0 };
+
+    // Match primary direction at start of string (also handles "South - North" -> South from origin)
+    const firstToken = clean.split(/[\s\-–—/→↔,()]+/)[0];
+    if (
+      firstToken === "n" ||
+      firstToken === "north" ||
+      clean.startsWith("north") ||
+      firstToken === "up" ||
+      clean.includes("stairs up")
+    ) {
+      return { ux: 0, uy: -1 };
+    }
+    if (
+      firstToken === "s" ||
+      firstToken === "south" ||
+      clean.startsWith("south") ||
+      firstToken === "down" ||
+      clean.includes("stairs down")
+    ) {
+      return { ux: 0, uy: 1 };
+    }
+    if (
+      firstToken === "e" ||
+      firstToken === "east" ||
+      clean.startsWith("east") ||
+      firstToken === "right"
+    ) {
+      return { ux: 1, uy: 0 };
+    }
+    if (
+      firstToken === "w" ||
+      firstToken === "west" ||
+      clean.startsWith("west") ||
+      firstToken === "left"
+    ) {
+      return { ux: -1, uy: 0 };
+    }
+    return null;
   }
 
   /**
-   * Optional explicit Auto-Arrange (Spring/Force + Collision Cleanup)
+   * Infers the cardinal direction vector { ux, uy } from FromRoom -> ToRoom
+   * using either `conn.label` or the negated `conn.reverseLabel`.
+   */
+  function getConnectionCardinalDirection(conn) {
+    const forward = parseCardinalVector(conn.label || "");
+    if (forward) return forward;
+
+    if (conn.bidirectional && conn.reverseLabel) {
+      const rev = parseCardinalVector(conn.reverseLabel);
+      if (rev) {
+        return { ux: -rev.ux, uy: -rev.uy };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Computes an ideal spawn position when branching from an existing room based on the exit label
+   */
+  function getDirectionalOffsetFromLabel(label = "", reverseLabel = "") {
+    const vec =
+      parseCardinalVector(label) ||
+      (reverseLabel ? parseCardinalVector(reverseLabel) && {
+        ux: -parseCardinalVector(reverseLabel).ux,
+        uy: -parseCardinalVector(reverseLabel).uy,
+      } : null);
+    if (vec) {
+      return {
+        dx: vec.ux * 256,
+        dy: vec.uy * 160,
+      };
+    }
+    return { dx: 256, dy: 0 };
+  }
+
+  /**
+   * Optional explicit Auto-Arrange:
+   * - Strictly prioritizes relative cardinal directions (N/S/E/W) and allows cardinal connections
+   *   to lengthen along their axis (e.g. 1x, 2x, 3x grid steps) if rooms are in between.
+   * - Allows Warp connections to span arbitrarily far without pulling rooms out of alignment.
    */
   function autoArrangeMap() {
     if (appState.rooms.length <= 1) return;
     pushUndoSnapshot();
     createBackupSnapshot("Before Auto-Arrange", true);
+
+    const STEP_X = 256;
+    const STEP_Y = 160;
 
     const nodes = appState.rooms.map((r) => {
       const p = getRoomPos(r.id);
@@ -418,9 +498,19 @@
     });
     const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
-    const iterations = 90;
+    // Track which rooms have at least one normal (non-warp) connection
+    const hasNormalConn = new Set();
+    for (const conn of appState.connections) {
+      if (conn.fromRoomId === conn.toRoomId) continue;
+      if (conn.style !== "warp") {
+        hasNormalConn.add(conn.fromRoomId);
+        hasNormalConn.add(conn.toRoomId);
+      }
+    }
+
+    const iterations = 130;
     for (let iter = 0; iter < iterations; iter++) {
-      // Repulsion between all rooms
+      // 1. Box-aware repulsion so rooms don't sit on top of each other
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const a = nodes[i];
@@ -428,50 +518,131 @@
           let dx = b.x - a.x;
           let dy = b.y - a.y;
           if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
-            dx = (Math.random() - 0.5) * 10;
-            dy = (Math.random() - 0.5) * 10;
+            dx = (i % 2 === 0 ? 1 : -1) * 8;
+            dy = (j % 2 === 0 ? 1 : -1) * 8;
           }
-          const dist = Math.hypot(dx, dy) || 1;
-          const minDist = 240;
-          if (dist < minDist * 1.6) {
-            const force = ((minDist * 1.6 - dist) / dist) * 0.16;
-            a.vx -= dx * force;
-            a.vy -= dy * force;
-            b.vx += dx * force;
-            b.vy += dy * force;
+          const minSepX = COLLISION_W + 44;
+          const minSepY = COLLISION_H + 44;
+          if (Math.abs(dx) < minSepX && Math.abs(dy) < minSepY) {
+            const overlapX = minSepX - Math.abs(dx);
+            const overlapY = minSepY - Math.abs(dy);
+            if (overlapX < overlapY) {
+              const pushX = (dx >= 0 ? 1 : -1) * overlapX * 0.18;
+              a.vx -= pushX;
+              b.vx += pushX;
+            } else {
+              const pushY = (dy >= 0 ? 1 : -1) * overlapY * 0.18;
+              a.vy -= pushY;
+              b.vy += pushY;
+            }
           }
         }
       }
 
-      // Attraction along connections + cardinal bias
+      // 2. Connection constraints (Cardinal priority + lengthening, Warps unconstrained)
       for (const conn of appState.connections) {
         if (conn.fromRoomId === conn.toRoomId) continue;
         const a = nodeMap.get(conn.fromRoomId);
         const b = nodeMap.get(conn.toRoomId);
         if (!a || !b) continue;
 
-        const dir = getDirectionalOffsetFromLabel(conn.label || "");
-        const idealDx = dir.dx;
-        const idealDy = dir.dy;
+        const isWarp = conn.style === "warp";
+        if (isWarp) {
+          // Warp connections are allowed to be very far away!
+          // Only apply a tiny tether if one of the rooms has ZERO normal connections so it doesn't drift off-screen.
+          if (!hasNormalConn.has(a.id) || !hasNormalConn.has(b.id)) {
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            const targetDist = 360;
+            if (dist > targetDist * 1.8) {
+              const pull = ((dist - targetDist) / dist) * 0.015;
+              a.vx += dx * pull;
+              a.vy += dy * pull;
+              b.vx -= dx * pull;
+              b.vy -= dy * pull;
+            }
+          }
+          continue;
+        }
 
-        const errX = (b.x - a.x) - idealDx;
-        const errY = (b.y - a.y) - idealDy;
+        const dir = getConnectionCardinalDirection(conn);
+        if (dir) {
+          // Cardinal connection: strictly align orthogonal axis, and enforce minimum step along cardinal axis
+          // while allowing the cardinal axis to lengthen if other rooms are in between!
+          if (dir.ux === 0 && dir.uy !== 0) {
+            // North / South connection: lock X axis strongly
+            const errX = b.x - a.x;
+            a.vx += errX * 0.24;
+            b.vx -= errX * 0.24;
 
-        a.vx += errX * 0.04;
-        a.vy += errY * 0.04;
-        b.vx -= errX * 0.04;
-        b.vy -= errY * 0.04;
+            // Along Y: b.y - a.y should be in direction `dir.uy` with magnitude >= STEP_Y
+            const projY = (b.y - a.y) * dir.uy;
+            if (projY < STEP_Y) {
+              // Too close or on the wrong side! Push strongly to at least STEP_Y
+              const corrY = (STEP_Y - projY) * dir.uy * 0.24;
+              a.vy -= corrY;
+              b.vy += corrY;
+            } else {
+              // Already on the correct cardinal side and >= STEP_Y; gentle pull so it can lengthen freely if needed
+              const corrY = (projY - STEP_Y) * dir.uy * 0.025;
+              a.vy += corrY;
+              b.vy -= corrY;
+            }
+          } else if (dir.uy === 0 && dir.ux !== 0) {
+            // East / West connection: lock Y axis strongly
+            const errY = b.y - a.y;
+            a.vy += errY * 0.24;
+            b.vy -= errY * 0.24;
+
+            // Along X: b.x - a.x should be in direction `dir.ux` with magnitude >= STEP_X
+            const projX = (b.x - a.x) * dir.ux;
+            if (projX < STEP_X) {
+              const corrX = (STEP_X - projX) * dir.ux * 0.24;
+              a.vx -= corrX;
+              b.vx += corrX;
+            } else {
+              const corrX = (projX - STEP_X) * dir.ux * 0.025;
+              a.vx += corrX;
+              b.vx -= corrX;
+            }
+          } else {
+            // Diagonal cardinal (NE, NW, SE, SW)
+            const projX = (b.x - a.x) * dir.ux;
+            const projY = (b.y - a.y) * dir.uy;
+            const rateX = projX < STEP_X ? 0.2 : 0.03;
+            const rateY = projY < STEP_Y ? 0.2 : 0.03;
+            const corrX = (STEP_X - projX) * dir.ux * rateX;
+            const corrY = (STEP_Y - projY) * dir.uy * rateY;
+            a.vx -= corrX;
+            b.vx += corrX;
+            a.vy -= corrY;
+            b.vy += corrY;
+          }
+        } else {
+          // Normal connection WITHOUT a cardinal direction label:
+          // Pull toward a comfortable distance along their current angle without forcing East
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const idealDist = 240;
+          const factor = ((dist - idealDist) / dist) * 0.06;
+          a.vx += dx * factor;
+          a.vy += dy * factor;
+          b.vx -= dx * factor;
+          b.vy -= dy * factor;
+        }
       }
 
       for (const n of nodes) {
-        n.x += Math.max(-25, Math.min(25, n.vx));
-        n.y += Math.max(-25, Math.min(25, n.vy));
-        n.vx *= 0.5;
-        n.vy *= 0.5;
+        n.x += Math.max(-32, Math.min(32, n.vx));
+        n.y += Math.max(-32, Math.min(32, n.vy));
+        n.vx *= 0.45;
+        n.vy *= 0.45;
       }
     }
 
-    // Final non-overlapping placement pass
+    // 3. Snap to grid and place without overlaps (lengthening along cardinal axis if a collision occurs)
     appState.mapDisplayConfig.positions = {};
     for (const n of nodes) {
       const snappedX = Math.round(n.x / 16) * 16;
@@ -483,7 +654,7 @@
     saveStateToLocal();
     fitMapViewport(document.getElementById("map-svg"), appState.mapDisplayConfig.viewport);
     renderAll();
-    showToast("Map rearranged (Press Ctrl+Z to undo)");
+    showToast("Map rearranged with cardinal priority (Press Ctrl+Z to undo)");
   }
 
   // ==================== SVG RENDERING: MAIN & NESTED MAPS ====================
@@ -2352,13 +2523,14 @@
       let targetX = 0;
       let targetY = 0;
       const exitLabel = document.getElementById("branch-exit-label").value.trim();
+      const returnLabel = document.getElementById("branch-return-label").value.trim();
 
       if (pendingSpawnCoords) {
         targetX = pendingSpawnCoords.x;
         targetY = pendingSpawnCoords.y;
       } else if (branchSourceRoomId && getRoomById(branchSourceRoomId)) {
         const srcPos = getRoomPos(branchSourceRoomId);
-        const offset = getDirectionalOffsetFromLabel(exitLabel);
+        const offset = getDirectionalOffsetFromLabel(exitLabel, returnLabel);
         targetX = srcPos.x + offset.dx;
         targetY = srcPos.y + offset.dy;
       } else if (appState.rooms.length > 0) {
@@ -2376,7 +2548,6 @@
       if (branchSourceRoomId && getRoomById(branchSourceRoomId)) {
         const isTwoWay = document.getElementById("branch-is-twoway").checked;
         const isWarp = document.getElementById("branch-is-warp").checked;
-        const returnLabel = document.getElementById("branch-return-label").value.trim();
 
         appState.connections.push({
           id: generateId("c"),
