@@ -325,6 +325,7 @@
           <div class="sidebar-header">
             <h2>Edit Room</h2>
             <div class="header-actions">
+              <button id="btn-back-to-connection" class="btn btn-xs btn-secondary hidden" title="Return to previously edited connection">← Connection</button>
               <button id="btn-center-selected-room" class="btn btn-xs btn-ghost" title="Center camera on this room">Center</button>
               <button id="btn-close-inspector" class="icon-btn" title="Deselect (Esc)">&times;</button>
             </div>
@@ -402,15 +403,27 @@
             <div class="conn-endpoints-box">
               <div class="endpoint-row">
                 <span class="endpoint-badge">From</span>
-                <button id="conn-inspect-from-btn" class="endpoint-room-link"></button>
+                <button id="conn-inspect-from-btn" type="button" class="endpoint-room-link" title="Jump to room on map"></button>
+                <button id="conn-edit-from-btn" type="button" class="icon-btn endpoint-edit-btn" title="Edit this room (node)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                </button>
               </div>
               <div class="endpoint-arrow-row">
                 <span id="conn-inspect-dir-icon">↔</span>
-                <button id="btn-reverse-conn-dir" class="btn btn-xs btn-ghost" title="Swap From and To rooms">Swap Ends</button>
+                <button id="btn-reverse-conn-dir" type="button" class="btn btn-xs btn-ghost" title="Swap From and To rooms">Swap Ends</button>
               </div>
               <div class="endpoint-row">
                 <span class="endpoint-badge">To</span>
-                <button id="conn-inspect-to-btn" class="endpoint-room-link"></button>
+                <button id="conn-inspect-to-btn" type="button" class="endpoint-room-link" title="Jump to room on map"></button>
+                <button id="conn-edit-to-btn" type="button" class="icon-btn endpoint-edit-btn" title="Edit this room (node)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                </button>
               </div>
             </div>
 

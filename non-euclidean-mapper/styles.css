@@ -1161,7 +1161,6 @@ textarea {
 .endpoint-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
 
@@ -1170,7 +1169,8 @@ textarea {
   text-transform: uppercase;
   color: var(--text-muted);
   font-weight: 600;
-  min-width: 40px;
+  min-width: 38px;
+  flex-shrink: 0;
 }
 
 .endpoint-room-link {
@@ -1179,14 +1179,44 @@ textarea {
   background: var(--bg-panel-elevated);
   border: 1px solid var(--border-subtle);
   color: var(--primary-hover);
-  padding: 4px 8px;
+  padding: 5px 9px;
   border-radius: var(--radius-sm);
   font-weight: 600;
   font-size: 12.5px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all 0.15s ease;
 }
 .endpoint-room-link:hover {
   border-color: var(--primary);
+  background: var(--bg-card);
+}
+
+.endpoint-edit-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.endpoint-edit-btn:hover {
+  background: var(--bg-card);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-1px);
 }
 
 .endpoint-arrow-row {

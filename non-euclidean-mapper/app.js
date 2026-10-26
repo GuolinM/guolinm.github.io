@@ -91,6 +91,7 @@
   // Search & Filter state (Priority 4)
   let searchQuery = "";
   let activeTagFilters = new Set();
+  let navigatedFromConnectionId = null;
 
   // New Room Modal state
   let newRoomColor = ROOM_COLORS[0];
@@ -1807,6 +1808,18 @@
     connEl.classList.toggle("hidden", !selectedConn);
 
     if (selectedRoom) {
+      const backBtn = document.getElementById("btn-back-to-connection");
+      if (backBtn) {
+        const returnConn = navigatedFromConnectionId ? getConnectionById(navigatedFromConnectionId) : null;
+        if (returnConn) {
+          backBtn.classList.remove("hidden");
+          backBtn.title = `Return to editing connection (${returnConn.label || "Exit"})`;
+        } else {
+          backBtn.classList.add("hidden");
+          navigatedFromConnectionId = null;
+        }
+      }
+
       const nameInput = document.getElementById("edit-room-name");
       if (document.activeElement !== nameInput) {
         nameInput.value = selectedRoom.name;
@@ -1928,22 +1941,70 @@
       const toRoom = getRoomById(selectedConn.toRoomId);
 
       const fromBtn = document.getElementById("conn-inspect-from-btn");
-      fromBtn.textContent = fromRoom ? fromRoom.name : "Unknown";
+      fromBtn.innerHTML = `
+        ${fromRoom ? renderRoomColorDot(fromRoom.color) : ""}
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${fromRoom ? escapeHtml(fromRoom.name) : "Unknown"}</span>
+      `;
+      fromBtn.title = fromRoom ? `View ${fromRoom.name} on map` : "";
       fromBtn.onclick = () => {
         if (fromRoom) {
-          selectRoom(fromRoom.id);
+          selectRoom(fromRoom.id, { fromConnectionId: selectedConn.id });
           centerCameraOnRoom(fromRoom.id);
         }
       };
 
+      const fromEditBtn = document.getElementById("conn-edit-from-btn");
+      if (fromEditBtn) {
+        fromEditBtn.title = fromRoom ? `Edit "${fromRoom.name}" (Node)` : "Edit room";
+        fromEditBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (fromRoom) {
+            selectRoom(fromRoom.id, { fromConnectionId: selectedConn.id });
+            centerCameraOnRoom(fromRoom.id);
+            setTimeout(() => {
+              const nameInput = document.getElementById("edit-room-name");
+              if (nameInput) {
+                nameInput.focus();
+                nameInput.select();
+              }
+            }, 60);
+            showToast(`Editing ${fromRoom.name} • Click '← Connection' to return`);
+          }
+        };
+      }
+
       const toBtn = document.getElementById("conn-inspect-to-btn");
-      toBtn.textContent = toRoom ? toRoom.name : "Unknown";
+      toBtn.innerHTML = `
+        ${toRoom ? renderRoomColorDot(toRoom.color) : ""}
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${toRoom ? escapeHtml(toRoom.name) : "Unknown"}</span>
+      `;
+      toBtn.title = toRoom ? `View ${toRoom.name} on map` : "";
       toBtn.onclick = () => {
         if (toRoom) {
-          selectRoom(toRoom.id);
+          selectRoom(toRoom.id, { fromConnectionId: selectedConn.id });
           centerCameraOnRoom(toRoom.id);
         }
       };
+
+      const toEditBtn = document.getElementById("conn-edit-to-btn");
+      if (toEditBtn) {
+        toEditBtn.title = toRoom ? `Edit "${toRoom.name}" (Node)` : "Edit room";
+        toEditBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (toRoom) {
+            selectRoom(toRoom.id, { fromConnectionId: selectedConn.id });
+            centerCameraOnRoom(toRoom.id);
+            setTimeout(() => {
+              const nameInput = document.getElementById("edit-room-name");
+              if (nameInput) {
+                nameInput.focus();
+                nameInput.select();
+              }
+            }, 60);
+            showToast(`Editing ${toRoom.name} • Click '← Connection' to return`);
+          }
+        };
+      }
 
       document.getElementById("conn-inspect-dir-icon").textContent =
         selectedConn.bidirectional ? "↕ Two-Way" : "↓ One-Way";
@@ -1988,11 +2049,16 @@
     renderInspector();
   }
 
-  function selectRoom(roomId) {
+  function selectRoom(roomId, { fromConnectionId = undefined } = {}) {
     isMultiSelectMode = false;
     multiSelectedRoomIds.clear();
     selectedRoomId = roomId;
     selectedConnectionId = null;
+    if (fromConnectionId !== undefined) {
+      navigatedFromConnectionId = fromConnectionId;
+    } else {
+      navigatedFromConnectionId = null;
+    }
     renderAll();
   }
 
@@ -2009,6 +2075,7 @@
     multiSelectedRoomIds.clear();
     selectedRoomId = null;
     selectedConnectionId = null;
+    navigatedFromConnectionId = null;
     renderAll();
   }
 
@@ -3193,6 +3260,16 @@
     document.getElementById("btn-center-selected-room").addEventListener("click", () => {
       if (selectedRoomId) centerCameraOnRoom(selectedRoomId);
     });
+    const backToConnBtn = document.getElementById("btn-back-to-connection");
+    if (backToConnBtn) {
+      backToConnBtn.addEventListener("click", () => {
+        if (navigatedFromConnectionId) {
+          const connId = navigatedFromConnectionId;
+          navigatedFromConnectionId = null;
+          selectConnection(connId);
+        }
+      });
+    }
 
     document.getElementById("edit-room-name").addEventListener("input", (e) => {
       const room = getRoomById(selectedRoomId);

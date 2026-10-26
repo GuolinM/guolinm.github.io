@@ -66,11 +66,15 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
   - **Color Accent** (preset swatches + dynamic swatches of any custom hex colors currently used by rooms in the map + special non-hex **Rainbow** gradient color option + hex code input `#RRGGBB` / `rainbow` and native color wheel picker)
 - Clicking/tapping any room on the map opens an **Inspector / Edit Side Panel** to view and edit its name, description, tags, color accent (including Rainbow and hex code input), and list of connections, or quickly add an adjacent connected room.
 
-### Priority 3: Connection Creation Menu (List Search + Nested Visual Map Picker)
+### Priority 3: Connection Creation Menu & Connection Inspector
 - Connect two rooms via:
   1. **Searchable Room List:** Type-ahead dropdown filtering rooms by name or tag.
   2. **Nested Mini-Map / Visual Picker Modal:** Open a secondary interactive map view (or split/overlay picker mode) where you can pan/zoom and click the target room visually.
 - Toggle **Two-Way (default)** vs. **One-Way** (`A ↔ B` vs. `A → B`), plus optional exit label (e.g., `N/S/E/W` or door description).
+- **Edit Connection Screen (Inspector):**
+  - Displays endpoint nodes with room color dots and names.
+  - Dedicated **Edit (Pencil) icon buttons** to the right of each node name (`From` and `To`) to immediately inspect and edit the room's details (name, color, tags, notes), with auto-focus and a seamless `← Connection` back-button to return directly to the connection inspector.
+  - Allows swapping endpoints, toggling directionality, setting passage style (Normal vs. Warp), editing exit/return labels, and editing connection notes.
 
 ### Priority 4: Search & Filter by Tag or Name
 - Persistent search bar (`Ctrl+F` / `/`) that filters rooms by **name**, **description**, or **tags**.
