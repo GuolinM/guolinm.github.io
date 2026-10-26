@@ -568,11 +568,19 @@ html, body {
 }
 
 .conn-group.warp {
-  opacity: 0.3;
+  opacity: 0.34;
+}
+
+.conn-group.warp.full-warp {
+  opacity: 0.64;
 }
 
 .conn-group.warp.connected-to-selected {
-  opacity: 0.72;
+  opacity: 0.76;
+}
+
+.conn-group.warp.full-warp.connected-to-selected {
+  opacity: 0.9;
 }
 
 .conn-group.warp:hover,
@@ -623,9 +631,15 @@ html, body {
 }
 
 .conn-group.warp .conn-label-bg {
-  fill: rgba(15, 23, 42, 0.48);
+  fill: rgba(15, 23, 42, 0.54);
   stroke: rgba(168, 85, 247, 0.45);
-  opacity: 0.65;
+  opacity: 0.72;
+}
+
+.conn-group.warp.full-warp .conn-label-bg {
+  fill: rgba(15, 23, 42, 0.8);
+  stroke: rgba(168, 85, 247, 0.68);
+  opacity: 0.9;
 }
 
 .conn-group.selected .conn-label-bg {
@@ -645,7 +659,11 @@ html, body {
 }
 
 .conn-group.warp .conn-label-text {
-  fill: rgba(233, 213, 255, 0.72);
+  fill: rgba(233, 213, 255, 0.78);
+}
+
+.conn-group.warp.full-warp .conn-label-text {
+  fill: rgba(243, 232, 255, 0.94);
 }
 
 .conn-group.warp:hover .conn-label-bg,

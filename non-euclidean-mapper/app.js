@@ -794,6 +794,9 @@
       const pathD = `M ${startX} ${startY} C ${startX - 45} ${ctrlY}, ${endX + 45} ${ctrlY}, ${endX} ${endY}`;
       return {
         pathD,
+        isSplitWarp: false,
+        fromTailPathD: null,
+        toTailPathD: null,
         fromLabelPos: { x: fromPos.x, y: ctrlY + 16 },
         toLabelPos: null,
       };
@@ -804,6 +807,11 @@
     const dist = Math.hypot(dx, dy) || 1;
     const ux = dx / dist;
     const uy = dy / dist;
+
+    // Average room spacing in save files is 256px (X) and 160px (Y).
+    // A warp is "more than two rooms away" when its normalized room-grid distance exceeds ~2.05 rooms.
+    const roomUnitsDist = Math.hypot(dx / 256, dy / 160);
+    const isSplitWarp = conn.style === "warp" && roomUnitsDist > 2.05;
 
     // Normal vector perpendicular to edge
     const nx = -uy;
@@ -830,7 +838,7 @@
         ? `M ${startPoint.x} ${startPoint.y} L ${endPoint.x} ${endPoint.y}`
         : `M ${startPoint.x} ${startPoint.y} Q ${midX} ${midY} ${endPoint.x} ${endPoint.y}`;
 
-    // Calculate points along Quadratic Bezier at t=0.28 (From label) and t=0.72 (To label)
+    // Calculate point along Quadratic Bezier at parameter t in [0, 1]
     const ptAt = (t) => {
       if (Math.abs(curveOffset) < 1) {
         return {
@@ -845,15 +853,49 @@
       };
     };
 
+    const isWarp = conn.style === "warp";
     const showFrom =
       Boolean(conn.label && conn.label.trim() !== "") &&
-      !isCardinalOrOrdinalOnlyLabel(conn.label);
+      (isWarp || !isCardinalOrOrdinalOnlyLabel(conn.label));
     const showTo =
       Boolean(conn.bidirectional && conn.reverseLabel && conn.reverseLabel.trim() !== "") &&
-      !isCardinalOrOrdinalOnlyLabel(conn.reverseLabel);
+      (isWarp || !isCardinalOrOrdinalOnlyLabel(conn.reverseLabel));
+
+    if (isSplitWarp) {
+      const chordDist = Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y) || 1;
+      const tailFrac = Math.min(0.28, Math.max(0.14, 92 / chordDist));
+
+      const fromTailEnd = ptAt(tailFrac);
+      const fromCtrlX = (1 - tailFrac) * startPoint.x + tailFrac * midX;
+      const fromCtrlY = (1 - tailFrac) * startPoint.y + tailFrac * midY;
+      const fromTailPathD = `M ${startPoint.x} ${startPoint.y} Q ${Math.round(fromCtrlX)} ${Math.round(
+        fromCtrlY
+      )} ${Math.round(fromTailEnd.x)} ${Math.round(fromTailEnd.y)}`;
+
+      const toTailStart = ptAt(1 - tailFrac);
+      const toCtrlX = tailFrac * midX + (1 - tailFrac) * endPoint.x;
+      const toCtrlY = tailFrac * midY + (1 - tailFrac) * endPoint.y;
+      const toTailPathD = `M ${Math.round(toTailStart.x)} ${Math.round(toTailStart.y)} Q ${Math.round(
+        toCtrlX
+      )} ${Math.round(toCtrlY)} ${endPoint.x} ${endPoint.y}`;
+
+      // Place labels directly on their respective tail sections
+      const labelFrac = tailFrac * 0.56;
+      return {
+        pathD: `${fromTailPathD} ${toTailPathD}`,
+        isSplitWarp: true,
+        fromTailPathD,
+        toTailPathD,
+        fromLabelPos: showFrom ? ptAt(labelFrac) : null,
+        toLabelPos: showTo ? ptAt(1 - labelFrac) : null,
+      };
+    }
 
     return {
       pathD,
+      isSplitWarp: false,
+      fromTailPathD: null,
+      toTailPathD: null,
       fromLabelPos: showFrom ? (showTo ? ptAt(0.28) : ptAt(0.5)) : null,
       toLabelPos: showTo ? (showFrom ? ptAt(0.74) : ptAt(0.5)) : null,
     };
@@ -980,7 +1022,10 @@
 
       const classes = ["conn-group"];
       if (!conn.bidirectional) classes.push("oneway");
-      if (conn.style === "warp") classes.push("warp");
+      if (conn.style === "warp") {
+        classes.push("warp");
+        classes.push(geom.isSplitWarp ? "split-warp" : "full-warp");
+      }
       if (isAttachedToSelectedRoom) classes.push("connected-to-selected");
       if (isSelected) classes.push("selected");
 
@@ -991,6 +1036,7 @@
         d: geom.pathD,
         class: "conn-hit-area",
       });
+      g.appendChild(hitPath);
 
       const isWarp = conn.style === "warp";
       let markerEnd = "url(#arrow-twoway)";
@@ -1006,25 +1052,44 @@
         markerStart = isWarp ? "url(#arrow-twoway-warp)" : "url(#arrow-twoway)";
       }
 
-      const pathAttrs = {
-        d: geom.pathD,
-        class: "conn-path",
-        "marker-end": markerEnd,
-      };
-      if (markerStart && conn.fromRoomId !== conn.toRoomId) {
-        pathAttrs["marker-start"] = markerStart;
+      if (geom.isSplitWarp && geom.fromTailPathD && geom.toTailPathD) {
+        // Render two separate tail paths on both sides so arrowheads appear cleanly on each tail stub
+        const fromTailAttrs = {
+          d: geom.fromTailPathD,
+          class: "conn-path",
+          "marker-end": markerEnd,
+        };
+        if (markerStart) {
+          fromTailAttrs["marker-start"] = markerStart;
+        }
+        const toTailAttrs = {
+          d: geom.toTailPathD,
+          class: "conn-path",
+          "marker-end": markerEnd,
+        };
+        if (markerStart) {
+          toTailAttrs["marker-start"] = markerStart;
+        }
+        g.appendChild(createSvgEl("path", fromTailAttrs));
+        g.appendChild(createSvgEl("path", toTailAttrs));
+      } else {
+        const pathAttrs = {
+          d: geom.pathD,
+          class: "conn-path",
+          "marker-end": markerEnd,
+        };
+        if (markerStart && conn.fromRoomId !== conn.toRoomId) {
+          pathAttrs["marker-start"] = markerStart;
+        }
+        g.appendChild(createSvgEl("path", pathAttrs));
       }
 
-      const visiblePath = createSvgEl("path", pathAttrs);
-      g.appendChild(hitPath);
-      g.appendChild(visiblePath);
-
-      // Render Exit Label(s) (skip pure cardinal/ordinal directions on non-self-loops; Up/Down and custom labels are shown)
+      // Render Exit Label(s) (skip pure cardinal/ordinal directions on normal non-self-loops; Warps, Up/Down, and custom labels are shown)
       const isSelfLoop = conn.fromRoomId === conn.toRoomId;
       if (
         conn.label &&
         geom.fromLabelPos &&
-        (isSelfLoop || !isCardinalOrOrdinalOnlyLabel(conn.label))
+        (isSelfLoop || isWarp || !isCardinalOrOrdinalOnlyLabel(conn.label))
       ) {
         const prefix = !conn.bidirectional ? "→ " : "";
         renderSvgLabelBadge(g, geom.fromLabelPos.x, geom.fromLabelPos.y, prefix + conn.label);
@@ -1033,7 +1098,7 @@
         conn.bidirectional &&
         conn.reverseLabel &&
         geom.toLabelPos &&
-        !isCardinalOrOrdinalOnlyLabel(conn.reverseLabel)
+        (isWarp || !isCardinalOrOrdinalOnlyLabel(conn.reverseLabel))
       ) {
         renderSvgLabelBadge(g, geom.toLabelPos.x, geom.toLabelPos.y, conn.reverseLabel);
       }
@@ -3502,7 +3567,7 @@
         document.getElementById("new-conn-label").value = val;
         const revInput = document.getElementById("new-conn-reverse-label");
         if (isStandardPresetLabel(revInput.value)) revInput.value = rev;
-        if (val === "Portal") {
+        if (val === "Warp" || val === "Portal") {
           connModalState.style = "warp";
           renderConnectionModalUI();
         }
