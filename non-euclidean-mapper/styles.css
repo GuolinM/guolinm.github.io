@@ -516,6 +516,9 @@ html, body {
   border-radius: 50%;
   flex-shrink: 0;
 }
+.room-color-dot.rainbow {
+  background: linear-gradient(135deg, #ef4444 0%, #f97316 20%, #eab308 40%, #10b981 60%, #06b6d4 80%, #8b5cf6 100%) !important;
+}
 
 .room-item-desc {
   color: var(--text-secondary);
@@ -1023,6 +1026,9 @@ textarea {
 .color-swatch.active {
   border-color: #fff;
   box-shadow: 0 0 0 2px var(--primary);
+}
+.color-swatch.rainbow {
+  background: linear-gradient(135deg, #ef4444 0%, #f97316 20%, #eab308 40%, #10b981 60%, #06b6d4 80%, #8b5cf6 100%) !important;
 }
 
 .hex-color-input-row {

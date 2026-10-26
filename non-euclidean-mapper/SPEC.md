@@ -62,8 +62,8 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
   - **Name**
   - **Description / Notes**
   - **Tags** (autocomplete/click from existing tags + create new, with live prefix highlighting on the existing tag chip list based on the currently typed tag after the last comma)
-  - **Color Accent** (preset swatches + dynamic swatches of any custom hex colors currently used by rooms in the map + hex code input `#RRGGBB` and native color wheel picker)
-- Clicking/tapping any room on the map opens an **Inspector / Edit Side Panel** to view and edit its name, description, tags, color accent (with hex code input), and list of connections, or quickly add an adjacent connected room.
+  - **Color Accent** (preset swatches + dynamic swatches of any custom hex colors currently used by rooms in the map + special non-hex **Rainbow** gradient color option + hex code input `#RRGGBB` / `rainbow` and native color wheel picker)
+- Clicking/tapping any room on the map opens an **Inspector / Edit Side Panel** to view and edit its name, description, tags, color accent (including Rainbow and hex code input), and list of connections, or quickly add an adjacent connected room.
 
 ### Priority 3: Connection Creation Menu (List Search + Nested Visual Map Picker)
 - Connect two rooms via:

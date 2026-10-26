@@ -26,6 +26,7 @@
     "#14b8a6", // Teal
     "#64748b", // Slate
   ];
+  const RAINBOW_COLOR = "rainbow";
 
   function normalizeHexColor(val) {
     if (!val || typeof val !== "string") return null;
@@ -42,17 +43,34 @@
     return null;
   }
 
+  function normalizeRoomColor(val) {
+    if (!val || typeof val !== "string") return null;
+    const trimmed = val.trim().toLowerCase();
+    if (trimmed === RAINBOW_COLOR) {
+      return RAINBOW_COLOR;
+    }
+    return normalizeHexColor(val);
+  }
+
+  function renderRoomColorDot(color) {
+    if (color === RAINBOW_COLOR) {
+      return `<span class="room-color-dot rainbow" title="Rainbow"></span>`;
+    }
+    return `<span class="room-color-dot" style="background: ${color || ROOM_COLORS[0]}"></span>`;
+  }
+
   function getAvailableRoomColors(extraColor = null) {
     const seen = new Set();
     const list = [];
     const addColor = (c) => {
-      const norm = normalizeHexColor(c);
+      const norm = normalizeRoomColor(c);
       if (norm && !seen.has(norm)) {
         seen.add(norm);
         list.push(norm);
       }
     };
     ROOM_COLORS.forEach(addColor);
+    addColor(RAINBOW_COLOR);
     if (appState && Array.isArray(appState.rooms)) {
       for (const r of appState.rooms) {
         if (r && r.color) addColor(r.color);
@@ -1153,13 +1171,18 @@
         class: "room-card-bg",
       });
 
+      const isRainbow = room.color === RAINBOW_COLOR;
+      const barFill = isRainbow
+        ? (isNestedPicker ? "url(#nested-rainbow-gradient)" : "url(#rainbow-gradient)")
+        : (room.color || ROOM_COLORS[0]);
+
       const accentBar = createSvgEl("rect", {
         x: 0,
         y: 0,
         width: 6,
         height: NODE_H,
-        fill: room.color || ROOM_COLORS[0],
-        class: "room-accent-bar",
+        fill: barFill,
+        class: "room-accent-bar" + (isRainbow ? " rainbow" : ""),
       });
 
       const titleText = createSvgEl("text", {
@@ -1690,7 +1713,7 @@
       item.className = "room-list-item" + (isRoomSelected ? " selected" : "");
       item.innerHTML = `
         <div class="room-item-top">
-          <span class="room-color-dot" style="background: ${room.color || ROOM_COLORS[0]}"></span>
+          ${renderRoomColorDot(room.color)}
           <span>${escapeHtml(room.name)}</span>
         </div>
         ${
@@ -1758,7 +1781,7 @@
             row.className = "conn-item-card";
             row.innerHTML = `
               <div class="room-item-top" style="gap: 8px;">
-                <span class="room-color-dot" style="background: ${r.color || ROOM_COLORS[0]}"></span>
+                ${renderRoomColorDot(r.color)}
                 <span style="font-size: 12.5px; font-weight: 600;">${escapeHtml(r.name)}</span>
               </div>
               <button type="button" class="btn btn-xs btn-ghost remove-multi-btn" title="Deselect room">&times;</button>
@@ -1796,14 +1819,17 @@
       // Color swatches (including any custom hex colors used across rooms)
       const colorsWrap = document.getElementById("edit-room-colors");
       colorsWrap.innerHTML = "";
-      const activeRoomColor = normalizeHexColor(selectedRoom.color) || ROOM_COLORS[0];
+      const activeRoomColor = normalizeRoomColor(selectedRoom.color) || ROOM_COLORS[0];
       const availableColors = getAvailableRoomColors(activeRoomColor);
       for (const c of availableColors) {
         const sw = document.createElement("button");
         sw.type = "button";
-        sw.className = "color-swatch" + (activeRoomColor === c ? " active" : "");
-        sw.style.background = c;
-        sw.title = c;
+        const isRainbow = c === RAINBOW_COLOR;
+        sw.className = "color-swatch" + (activeRoomColor === c ? " active" : "") + (isRainbow ? " rainbow" : "");
+        if (!isRainbow) {
+          sw.style.background = c;
+        }
+        sw.title = isRainbow ? "Rainbow" : c;
         sw.addEventListener("click", () => {
           pushUndoSnapshot();
           selectedRoom.color = c;
@@ -1815,7 +1841,9 @@
 
       const editColorPicker = document.getElementById("edit-room-color-picker");
       if (editColorPicker && document.activeElement !== editColorPicker) {
-        editColorPicker.value = activeRoomColor;
+        if (activeRoomColor !== RAINBOW_COLOR) {
+          editColorPicker.value = activeRoomColor;
+        }
       }
       const editHexInput = document.getElementById("edit-room-hex-input");
       if (editHexInput && document.activeElement !== editHexInput) {
@@ -2052,15 +2080,18 @@
     const renderNewRoomSwatches = () => {
       const swatchContainer = document.getElementById("new-room-colors");
       swatchContainer.innerHTML = "";
-      const normNew = normalizeHexColor(newRoomColor) || ROOM_COLORS[0];
+      const normNew = normalizeRoomColor(newRoomColor) || ROOM_COLORS[0];
       newRoomColor = normNew;
       const availableColors = getAvailableRoomColors(normNew);
       for (const c of availableColors) {
         const btn = document.createElement("button");
         btn.type = "button";
-        btn.className = "color-swatch" + (normNew === c ? " active" : "");
-        btn.style.background = c;
-        btn.title = c;
+        const isRainbow = c === RAINBOW_COLOR;
+        btn.className = "color-swatch" + (normNew === c ? " active" : "") + (isRainbow ? " rainbow" : "");
+        if (!isRainbow) {
+          btn.style.background = c;
+        }
+        btn.title = isRainbow ? "Rainbow" : c;
         btn.addEventListener("click", () => {
           newRoomColor = c;
           renderNewRoomSwatches();
@@ -2068,7 +2099,9 @@
         swatchContainer.appendChild(btn);
       }
       const newColorPicker = document.getElementById("new-room-color-picker");
-      if (newColorPicker) newColorPicker.value = normNew;
+      if (newColorPicker && normNew !== RAINBOW_COLOR) {
+        newColorPicker.value = normNew;
+      }
       const newHexInput = document.getElementById("new-room-hex-input");
       if (newHexInput && document.activeElement !== newHexInput) newHexInput.value = normNew;
     };
@@ -2273,7 +2306,7 @@
           "room-list-item" + (isPickedFrom || isPickedTo ? " selected" : "");
         item.innerHTML = `
           <div class="room-item-top">
-            <span class="room-color-dot" style="background: ${room.color || ROOM_COLORS[0]}"></span>
+            ${renderRoomColorDot(room.color)}
             <span>${escapeHtml(room.name)}</span>
             ${
               isPickedFrom
@@ -3209,9 +3242,9 @@
     const applyHexToSelectedRoom = (rawColor) => {
       const room = getRoomById(selectedRoomId);
       if (!room) return;
-      const norm = normalizeHexColor(rawColor);
+      const norm = normalizeRoomColor(rawColor);
       if (!norm) {
-        showToast("Enter a valid hex color like #38bdf8 or #f59e0b");
+        showToast("Enter a valid hex color like #38bdf8, or 'rainbow'");
         return;
       }
       if (room.color !== norm) {
@@ -3237,14 +3270,14 @@
 
     // Hex Color Input & Color Wheel in Add Room Modal
     const applyHexToNewRoomModal = (rawColor) => {
-      const norm = normalizeHexColor(rawColor);
+      const norm = normalizeRoomColor(rawColor);
       if (!norm) {
-        showToast("Enter a valid hex color like #38bdf8 or #f59e0b");
+        showToast("Enter a valid hex color like #38bdf8, or 'rainbow'");
         return;
       }
       newRoomColor = norm;
       const newColorPicker = document.getElementById("new-room-color-picker");
-      if (newColorPicker) newColorPicker.value = norm;
+      if (newColorPicker && norm !== RAINBOW_COLOR) newColorPicker.value = norm;
       const newHexInput = document.getElementById("new-room-hex-input");
       if (newHexInput) newHexInput.value = norm;
 
@@ -3254,9 +3287,12 @@
         for (const c of getAvailableRoomColors(norm)) {
           const btn = document.createElement("button");
           btn.type = "button";
-          btn.className = "color-swatch" + (norm === c ? " active" : "");
-          btn.style.background = c;
-          btn.title = c;
+          const isRainbow = c === RAINBOW_COLOR;
+          btn.className = "color-swatch" + (norm === c ? " active" : "") + (isRainbow ? " rainbow" : "");
+          if (!isRainbow) {
+            btn.style.background = c;
+          }
+          btn.title = isRainbow ? "Rainbow" : c;
           btn.addEventListener("click", () => {
             applyHexToNewRoomModal(c);
           });
