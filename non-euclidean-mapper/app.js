@@ -1974,53 +1974,192 @@
     }
   }
 
-  // ==================== YAML & JSON EXPORT / IMPORT (Priority 5) ====================
+  // ==================== UNIFIED SAVE SCHEMA & CODECS (JSON / YAML / SHARE LINK) ====================
+  /**
+   * Single source of truth for all persisted fields across JSON, YAML, and Compact Share Links.
+   * Adding a new field to `room`, `connection`, `viewport`, or `meta` here automatically includes it
+   * in validation, JSON export/import, YAML export/import, and Compact Link encoding/decoding.
+   */
+  const SAVE_SCHEMA = {
+    meta: [
+      { key: "version", type: "int", default: () => 1 },
+      { key: "title", type: "string", default: () => "Untitled Map" },
+      { key: "updatedAt", type: "string", default: () => new Date().toISOString() },
+    ],
+    room: [
+      { key: "id", type: "id", prefix: "r", compactSkip: true },
+      { key: "name", type: "string", default: () => "Unnamed Room" },
+      { key: "color", type: "dict-string", default: () => ROOM_COLORS[0] },
+      { key: "description", type: "string", default: () => "" },
+      { key: "tags", type: "dict-string-array", default: () => [] },
+    ],
+    connection: [
+      { key: "id", type: "id", prefix: "c", compactSkip: true },
+      { key: "fromRoomId", type: "room-ref", default: () => "" },
+      { key: "toRoomId", type: "room-ref", default: () => "" },
+      { key: "bidirectional", type: "boolean", default: () => true },
+      { key: "style", type: "dict-string", default: () => "normal" },
+      { key: "label", type: "dict-string", default: () => "" },
+      { key: "reverseLabel", type: "dict-string", default: () => "" },
+      { key: "notes", type: "string", default: () => "" },
+    ],
+    viewport: [
+      { key: "panX", type: "int", default: () => 480 },
+      { key: "panY", type: "int", default: () => 320 },
+      { key: "zoom", type: "float", default: () => 1 },
+    ],
+  };
+
+  function normalizeFieldValue(rawVal, fieldDesc) {
+    const defVal = fieldDesc.default ? fieldDesc.default() : "";
+    if (rawVal === undefined || rawVal === null) {
+      return fieldDesc.type === "id" ? generateId(fieldDesc.prefix || "id") : defVal;
+    }
+    switch (fieldDesc.type) {
+      case "id":
+        return String(rawVal || generateId(fieldDesc.prefix || "id"));
+      case "string":
+      case "dict-string":
+      case "room-ref":
+        return String(rawVal);
+      case "dict-string-array":
+        return Array.isArray(rawVal) ? rawVal.map((item) => String(item)) : defVal;
+      case "boolean":
+        return typeof rawVal === "boolean" ? rawVal : rawVal !== false && rawVal !== "false" && rawVal !== 0;
+      case "int": {
+        const n = Number(rawVal);
+        return Number.isFinite(n) ? Math.round(n) : defVal;
+      }
+      case "float": {
+        const n = Number(rawVal);
+        return Number.isFinite(n) ? Number(n.toFixed(3)) : defVal;
+      }
+      default:
+        return rawVal;
+    }
+  }
+
+  function isFieldDefaultValue(val, fieldDesc) {
+    if (!fieldDesc.default) return false;
+    const defVal = fieldDesc.default();
+    if (fieldDesc.type === "dict-string-array") {
+      return Array.isArray(val) && val.length === 0;
+    }
+    return val === defVal;
+  }
+
+  function normalizeEntityBySchema(rawObj, schemaFields) {
+    const out = {};
+    const src = rawObj && typeof rawObj === "object" ? rawObj : {};
+    for (const field of schemaFields) {
+      out[field.key] = normalizeFieldValue(src[field.key], field);
+    }
+    return out;
+  }
+
+  /**
+   * Produces the Canonical Intermediate Data Structure used by all codecs and runtime state.
+   */
+  function validateAndNormalizeState(data) {
+    if (!data || !Array.isArray(data.rooms) || !Array.isArray(data.connections)) {
+      throw new Error("Invalid map file structure: missing rooms or connections array.");
+    }
+    const meta = normalizeEntityBySchema(data, SAVE_SCHEMA.meta);
+    const clean = createEmptyMapState(meta.title || "Imported Map");
+    for (const field of SAVE_SCHEMA.meta) {
+      clean[field.key] = meta[field.key];
+    }
+
+    clean.rooms = data.rooms.map((r) => normalizeEntityBySchema(r, SAVE_SCHEMA.room));
+    clean.connections = data.connections.map((c) => {
+      const norm = normalizeEntityBySchema(c, SAVE_SCHEMA.connection);
+      norm.style = norm.style === "warp" ? "warp" : "normal";
+      return norm;
+    });
+
+    clean.mapDisplayConfig.viewport = normalizeEntityBySchema(
+      data.mapDisplayConfig?.viewport,
+      SAVE_SCHEMA.viewport
+    );
+
+    clean.mapDisplayConfig.positions = {};
+    const rawPositions = data.mapDisplayConfig?.positions || {};
+    for (const [roomId, pos] of Object.entries(rawPositions)) {
+      if (pos && Number.isFinite(Number(pos.x)) && Number.isFinite(Number(pos.y))) {
+        clean.mapDisplayConfig.positions[roomId] = {
+          x: Math.round(Number(pos.x)),
+          y: Math.round(Number(pos.y)),
+        };
+      }
+    }
+
+    // Ensure every room has a valid non-overlapping position
+    for (const r of clean.rooms) {
+      if (!clean.mapDisplayConfig.positions[r.id]) {
+        const free = findNearestFreePosition(0, 0, r.id);
+        clean.mapDisplayConfig.positions[r.id] = free;
+      }
+    }
+    return clean;
+  }
+
+  function formatYamlFieldValue(val, fieldDesc) {
+    const q = (str) => JSON.stringify(String(str ?? ""));
+    switch (fieldDesc.type) {
+      case "int":
+        return String(Math.round(Number(val) || 0));
+      case "float":
+        return String(Number(val) || 0);
+      case "boolean":
+        return String(Boolean(val));
+      case "dict-string-array":
+        return `[${(Array.isArray(val) ? val : []).map((t) => q(t)).join(", ")}]`;
+      default:
+        return q(val);
+    }
+  }
+
   function serializeToYaml(state) {
+    const canonical = validateAndNormalizeState(state);
     const q = (str) => JSON.stringify(String(str ?? ""));
     const lines = [];
     lines.push(`# Non-Euclidean Game Mapper Save File`);
-    lines.push(`version: ${state.version || 1}`);
-    lines.push(`title: ${q(state.title || "Untitled Map")}`);
-    lines.push(`updatedAt: ${q(state.updatedAt || new Date().toISOString())}`);
+    for (const field of SAVE_SCHEMA.meta) {
+      lines.push(`${field.key}: ${formatYamlFieldValue(canonical[field.key], field)}`);
+    }
 
     lines.push(`rooms:`);
-    if (!state.rooms || state.rooms.length === 0) {
+    if (canonical.rooms.length === 0) {
       lines.push(`  []`);
     } else {
-      for (const r of state.rooms) {
-        lines.push(`  - id: ${q(r.id)}`);
-        lines.push(`    name: ${q(r.name)}`);
-        lines.push(`    color: ${q(r.color || "#0ea5e9")}`);
-        lines.push(`    description: ${q(r.description || "")}`);
-        const tagsStr = (r.tags || []).map((t) => q(t)).join(", ");
-        lines.push(`    tags: [${tagsStr}]`);
+      for (const r of canonical.rooms) {
+        SAVE_SCHEMA.room.forEach((field, idx) => {
+          const prefix = idx === 0 ? "  - " : "    ";
+          lines.push(`${prefix}${field.key}: ${formatYamlFieldValue(r[field.key], field)}`);
+        });
       }
     }
 
     lines.push(`connections:`);
-    if (!state.connections || state.connections.length === 0) {
+    if (canonical.connections.length === 0) {
       lines.push(`  []`);
     } else {
-      for (const c of state.connections) {
-        lines.push(`  - id: ${q(c.id)}`);
-        lines.push(`    fromRoomId: ${q(c.fromRoomId)}`);
-        lines.push(`    toRoomId: ${q(c.toRoomId)}`);
-        lines.push(`    bidirectional: ${Boolean(c.bidirectional)}`);
-        lines.push(`    style: ${q(c.style || "normal")}`);
-        lines.push(`    label: ${q(c.label || "")}`);
-        lines.push(`    reverseLabel: ${q(c.reverseLabel || "")}`);
-        lines.push(`    notes: ${q(c.notes || "")}`);
+      for (const c of canonical.connections) {
+        SAVE_SCHEMA.connection.forEach((field, idx) => {
+          const prefix = idx === 0 ? "  - " : "    ";
+          lines.push(`${prefix}${field.key}: ${formatYamlFieldValue(c[field.key], field)}`);
+        });
       }
     }
 
     lines.push(`mapDisplayConfig:`);
-    const vp = state.mapDisplayConfig?.viewport || { panX: 480, panY: 320, zoom: 1 };
+    const vp = canonical.mapDisplayConfig.viewport;
     lines.push(`  viewport:`);
-    lines.push(`    panX: ${Math.round(vp.panX)}`);
-    lines.push(`    panY: ${Math.round(vp.panY)}`);
-    lines.push(`    zoom: ${vp.zoom}`);
+    for (const field of SAVE_SCHEMA.viewport) {
+      lines.push(`    ${field.key}: ${formatYamlFieldValue(vp[field.key], field)}`);
+    }
     lines.push(`  positions:`);
-    const posEntries = Object.entries(state.mapDisplayConfig?.positions || {});
+    const posEntries = Object.entries(canonical.mapDisplayConfig.positions || {});
     if (posEntries.length === 0) {
       lines.push(`    {}`);
     } else {
@@ -2032,8 +2171,12 @@
     return lines.join("\n") + "\n";
   }
 
+  function serializeToJson(state) {
+    return JSON.stringify(validateAndNormalizeState(state), null, 2);
+  }
+
   /**
-   * Parses either JSON or our structured YAML save format back into a valid map state object
+   * Parses either JSON or our structured YAML save format back into a canonical map state object
    */
   function parseImportedFileContent(text) {
     const trimmed = text.trim();
@@ -2041,7 +2184,6 @@
       return validateAndNormalizeState(JSON.parse(trimmed));
     }
 
-    // Parse YAML save format
     const result = createEmptyMapState();
     const lines = trimmed.split(/\r?\n/);
     let section = null;
@@ -2061,17 +2203,24 @@
       return s;
     };
 
+    const metaMap = new Map(SAVE_SCHEMA.meta.map((f) => [f.key, f]));
+    const roomFieldMap = new Map(SAVE_SCHEMA.room.map((f) => [f.key, f]));
+    const connFieldMap = new Map(SAVE_SCHEMA.connection.map((f) => [f.key, f]));
+    const vpFieldMap = new Map(SAVE_SCHEMA.viewport.map((f) => [f.key, f]));
+
     for (const rawLine of lines) {
       const line = rawLine.replace(/\s+$/, "");
       if (!line.trim() || line.trim().startsWith("#")) continue;
 
-      if (line.startsWith("title:")) {
-        result.title = unquote(line.slice(6));
-      } else if (line.startsWith("version:")) {
-        result.version = Number(line.slice(8).trim()) || 1;
-      } else if (line.startsWith("updatedAt:")) {
-        result.updatedAt = unquote(line.slice(10));
-      } else if (line.startsWith("rooms:")) {
+      if (!line.startsWith(" ") && line.includes(":")) {
+        const topKey = line.slice(0, line.indexOf(":")).trim();
+        if (metaMap.has(topKey)) {
+          assignYamlKeyValBySchema(result, line, metaMap, unquote);
+          continue;
+        }
+      }
+
+      if (line.startsWith("rooms:")) {
         section = "rooms";
         currentItem = null;
       } else if (line.startsWith("connections:")) {
@@ -2083,14 +2232,14 @@
       } else if (section === "rooms" || section === "connections") {
         const trimmedLine = line.trim();
         if (trimmedLine === "[]") continue;
+        const fieldMap = section === "rooms" ? roomFieldMap : connFieldMap;
         if (trimmedLine.startsWith("- ")) {
           currentItem = {};
           if (section === "rooms") result.rooms.push(currentItem);
           else result.connections.push(currentItem);
-          const kv = trimmedLine.slice(2);
-          assignYamlKeyVal(currentItem, kv, unquote);
+          assignYamlKeyValBySchema(currentItem, trimmedLine.slice(2), fieldMap, unquote);
         } else if (currentItem) {
-          assignYamlKeyVal(currentItem, trimmedLine, unquote);
+          assignYamlKeyValBySchema(currentItem, trimmedLine, fieldMap, unquote);
         }
       } else if (section === "mapDisplayConfig") {
         const trimmedLine = line.trim();
@@ -2099,13 +2248,12 @@
         } else if (trimmedLine.startsWith("positions:")) {
           subSection = "positions";
         } else if (subSection === "viewport") {
-          const [k, v] = trimmedLine.split(":").map((s) => s.trim());
-          if (k && v !== undefined) {
-            result.mapDisplayConfig.viewport[k] = Number(v);
-          }
+          assignYamlKeyValBySchema(result.mapDisplayConfig.viewport, trimmedLine, vpFieldMap, unquote);
         } else if (subSection === "positions") {
           if (trimmedLine === "{}") continue;
-          const match = trimmedLine.match(/^(.+?):\s*\{\s*x:\s*(-?\d+(?:\.\d+)?),\s*y:\s*(-?\d+(?:\.\d+)?)\s*\}$/);
+          const match = trimmedLine.match(
+            /^(.+?):\s*\{\s*x:\s*(-?\d+(?:\.\d+)?),\s*y:\s*(-?\d+(?:\.\d+)?)\s*\}$/
+          );
           if (match) {
             const roomId = unquote(match[1]);
             result.mapDisplayConfig.positions[roomId] = {
@@ -2120,71 +2268,241 @@
     return validateAndNormalizeState(result);
   }
 
-  function assignYamlKeyVal(obj, kvString, unquote) {
+  function assignYamlKeyValBySchema(obj, kvString, schemaMap, unquote) {
     const idx = kvString.indexOf(":");
     if (idx === -1) return;
     const key = kvString.slice(0, idx).trim();
     const rawVal = kvString.slice(idx + 1).trim();
+    const fieldDesc = schemaMap ? schemaMap.get(key) : null;
 
-    if (key === "tags") {
+    if (fieldDesc?.type === "dict-string-array") {
       if (rawVal.startsWith("[") && rawVal.endsWith("]")) {
         try {
-          obj.tags = JSON.parse(rawVal);
+          obj[key] = JSON.parse(rawVal);
           return;
         } catch (e) {
           const inner = rawVal.slice(1, -1).trim();
-          obj.tags = inner ? inner.split(",").map((s) => unquote(s)) : [];
+          obj[key] = inner ? inner.split(",").map((s) => unquote(s)) : [];
           return;
         }
       }
-      obj.tags = [];
-    } else if (key === "bidirectional") {
-      obj.bidirectional = rawVal === "true";
+      obj[key] = [];
+    } else if (fieldDesc?.type === "boolean") {
+      obj[key] = rawVal === "true";
+    } else if (fieldDesc?.type === "int" || fieldDesc?.type === "float") {
+      obj[key] = Number(unquote(rawVal));
     } else {
       obj[key] = unquote(rawVal);
     }
   }
 
-  function validateAndNormalizeState(data) {
-    if (!data || !Array.isArray(data.rooms) || !Array.isArray(data.connections)) {
-      throw new Error("Invalid map file structure: missing rooms or connections array.");
+  // ==================== COMPACT SHARE LINK CODEC (?save=...) ====================
+  /**
+   * Packs a canonical state into a compact schema-driven tuple representation:
+   * [formatVersion, title, viewportTuple, dictArray, roomTuples, connectionTuples]
+   * - Uses SAVE_SCHEMA.room, SAVE_SCHEMA.connection, and SAVE_SCHEMA.viewport directly
+   * - Interns repeated strings (`dict-string` & `dict-string-array`) into `dictArray`
+   * - Replaces internal room IDs with integer room indices 0..N-1
+   * - Trims trailing default values on each tuple
+   */
+  function packStateToCompactTuple(state) {
+    const canonical = validateAndNormalizeState(state);
+    const dict = [];
+    const dictMap = new Map();
+    const intern = (str) => {
+      const s = String(str ?? "");
+      if (!s) return -1;
+      if (dictMap.has(s)) return dictMap.get(s);
+      const id = dict.length;
+      dict.push(s);
+      dictMap.set(s, id);
+      return id;
+    };
+
+    const roomIndexMap = new Map(canonical.rooms.map((r, idx) => [r.id, idx]));
+    const compactRoomFields = SAVE_SCHEMA.room.filter((f) => !f.compactSkip);
+    const compactConnFields = SAVE_SCHEMA.connection.filter((f) => !f.compactSkip);
+
+    const encodeFieldForTuple = (val, field) => {
+      if (field.type === "dict-string") return intern(val);
+      if (field.type === "dict-string-array") return (val || []).map(intern);
+      if (field.type === "room-ref") return roomIndexMap.get(val) ?? 0;
+      if (field.type === "boolean") return val ? 1 : 0;
+      return val;
+    };
+
+    const trimTrailingDefaults = (values, rawEntity, fields, prefixLen) => {
+      let end = values.length;
+      while (end > prefixLen) {
+        const field = fields[end - prefixLen - 1];
+        if (isFieldDefaultValue(rawEntity[field.key], field)) {
+          end--;
+        } else {
+          break;
+        }
+      }
+      return values.slice(0, end);
+    };
+
+    const roomTuples = canonical.rooms.map((r) => {
+      const pos = canonical.mapDisplayConfig.positions[r.id] || { x: 0, y: 0 };
+      const rawTuple = [
+        Math.round(pos.x),
+        Math.round(pos.y),
+        ...compactRoomFields.map((f) => encodeFieldForTuple(r[f.key], f)),
+      ];
+      return trimTrailingDefaults(rawTuple, r, compactRoomFields, 2);
+    });
+
+    const connTuples = canonical.connections
+      .filter((c) => roomIndexMap.has(c.fromRoomId) && roomIndexMap.has(c.toRoomId))
+      .map((c) => {
+        const rawTuple = compactConnFields.map((f) => encodeFieldForTuple(c[f.key], f));
+        return trimTrailingDefaults(rawTuple, c, compactConnFields, 2);
+      });
+
+    const vp = canonical.mapDisplayConfig.viewport;
+    const vpTuple = SAVE_SCHEMA.viewport.map((f) => vp[f.key]);
+
+    return [1, canonical.title, vpTuple, dict, roomTuples, connTuples];
+  }
+
+  function unpackStateFromCompactTuple(tuple) {
+    if (!Array.isArray(tuple) || tuple.length < 6) {
+      throw new Error("Invalid compact save payload.");
     }
-    const clean = createEmptyMapState(data.title || "Imported Map");
-    clean.rooms = data.rooms.map((r) => ({
-      id: String(r.id || generateId("r")),
-      name: String(r.name || "Unnamed Room"),
-      description: String(r.description || ""),
-      tags: Array.isArray(r.tags) ? r.tags.map(String) : [],
-      color: r.color || ROOM_COLORS[0],
-    }));
-    clean.connections = data.connections.map((c) => ({
-      id: String(c.id || generateId("c")),
-      fromRoomId: String(c.fromRoomId),
-      toRoomId: String(c.toRoomId),
-      bidirectional: c.bidirectional !== false,
-      style: c.style === "warp" ? "warp" : "normal",
-      label: String(c.label || ""),
-      reverseLabel: String(c.reverseLabel || ""),
-      notes: String(c.notes || ""),
-    }));
-    if (data.mapDisplayConfig?.viewport) {
-      clean.mapDisplayConfig.viewport = {
-        panX: Number(data.mapDisplayConfig.viewport.panX) || 480,
-        panY: Number(data.mapDisplayConfig.viewport.panY) || 320,
-        zoom: Number(data.mapDisplayConfig.viewport.zoom) || 1,
-      };
+    const [version, title, vpTuple, dict, roomTuples, connTuples] = tuple;
+    const lookupDict = (idx) => (typeof idx === "number" && idx >= 0 && idx < dict.length ? dict[idx] : "");
+
+    const compactRoomFields = SAVE_SCHEMA.room.filter((f) => !f.compactSkip);
+    const compactConnFields = SAVE_SCHEMA.connection.filter((f) => !f.compactSkip);
+
+    const roomIds = roomTuples.map((_, i) => `r_${i}`);
+
+    const decodeFieldFromTuple = (encodedVal, field) => {
+      if (encodedVal === undefined) return field.default ? field.default() : "";
+      if (field.type === "dict-string") return lookupDict(encodedVal);
+      if (field.type === "dict-string-array") {
+        return Array.isArray(encodedVal) ? encodedVal.map(lookupDict).filter(Boolean) : [];
+      }
+      if (field.type === "room-ref") return roomIds[encodedVal] || roomIds[0] || "";
+      if (field.type === "boolean") return Boolean(encodedVal);
+      return encodedVal;
+    };
+
+    const positions = {};
+    const rooms = roomTuples.map((rt, i) => {
+      const id = roomIds[i];
+      positions[id] = { x: Number(rt[0]) || 0, y: Number(rt[1]) || 0 };
+      const roomObj = { id };
+      compactRoomFields.forEach((field, fIdx) => {
+        roomObj[field.key] = decodeFieldFromTuple(rt[fIdx + 2], field);
+      });
+      return roomObj;
+    });
+
+    const connections = connTuples.map((ct, i) => {
+      const connObj = { id: `c_${i}` };
+      compactConnFields.forEach((field, fIdx) => {
+        connObj[field.key] = decodeFieldFromTuple(ct[fIdx], field);
+      });
+      return connObj;
+    });
+
+    const viewport = {};
+    SAVE_SCHEMA.viewport.forEach((field, idx) => {
+      viewport[field.key] = vpTuple?.[idx] ?? field.default();
+    });
+
+    return validateAndNormalizeState({
+      version: Number(version) || 1,
+      title: String(title || "Shared Map"),
+      updatedAt: new Date().toISOString(),
+      rooms,
+      connections,
+      mapDisplayConfig: { viewport, positions },
+    });
+  }
+
+  function uint8ToBase64Url(bytes) {
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
     }
-    if (data.mapDisplayConfig?.positions) {
-      clean.mapDisplayConfig.positions = { ...data.mapDisplayConfig.positions };
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function base64UrlToUint8(b64url) {
+    const padded = b64url.replace(/-/g, "+").replace(/_/g, "/");
+    const padLen = (4 - (padded.length % 4)) % 4;
+    const binary = atob(padded + "=".repeat(padLen));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
     }
-    // Ensure every room has a valid non-overlapping position
-    for (const r of clean.rooms) {
-      if (!clean.mapDisplayConfig.positions[r.id]) {
-        const free = findNearestFreePosition(0, 0, r.id);
-        clean.mapDisplayConfig.positions[r.id] = free;
+    return bytes;
+  }
+
+  async function encodeStateToSaveParam(state) {
+    const tupleJson = JSON.stringify(packStateToCompactTuple(state));
+    const rawBytes = new TextEncoder().encode(tupleJson);
+    if (typeof CompressionStream === "function") {
+      try {
+        const cs = new CompressionStream("deflate-raw");
+        const writer = cs.writable.getWriter();
+        writer.write(rawBytes);
+        writer.close();
+        const compressedBuf = await new Response(cs.readable).arrayBuffer();
+        return "z." + uint8ToBase64Url(new Uint8Array(compressedBuf));
+      } catch (e) {
+        console.warn("Deflate compression fallback:", e);
       }
     }
-    return clean;
+    return "u." + uint8ToBase64Url(rawBytes);
+  }
+
+  async function decodeStateFromSaveParam(param) {
+    const clean = String(param || "").trim();
+    if (!clean) throw new Error("Empty save parameter.");
+    let jsonBytes;
+    if (clean.startsWith("z.")) {
+      const compressed = base64UrlToUint8(clean.slice(2));
+      if (typeof DecompressionStream !== "function") {
+        throw new Error("This browser does not support DecompressionStream for compressed links.");
+      }
+      const ds = new DecompressionStream("deflate-raw");
+      const writer = ds.writable.getWriter();
+      writer.write(compressed);
+      writer.close();
+      const buf = await new Response(ds.readable).arrayBuffer();
+      jsonBytes = new Uint8Array(buf);
+    } else if (clean.startsWith("u.")) {
+      jsonBytes = base64UrlToUint8(clean.slice(2));
+    } else {
+      // Fallback: raw base64url compressed or uncompressed JSON
+      jsonBytes = base64UrlToUint8(clean);
+    }
+    const tuple = JSON.parse(new TextDecoder().decode(jsonBytes));
+    return unpackStateFromCompactTuple(tuple);
+  }
+
+  async function copyShareableLinkToClipboard() {
+    try {
+      const saveParam = await encodeStateToSaveParam(appState);
+      const baseUrl =
+        window.location.protocol === "http:" || window.location.protocol === "https:"
+          ? window.location.origin + window.location.pathname
+          : "https://guolinm.github.io/non-euclidean-mapper/";
+      const fullUrl = `${baseUrl}?save=${saveParam}`;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(fullUrl);
+        showToast(`Copied shareable link (${fullUrl.length} chars) to clipboard!`);
+      } else {
+        window.prompt("Copy your shareable map link:", fullUrl);
+      }
+    } catch (err) {
+      alert("Failed to generate shareable link: " + err.message);
+    }
   }
 
   function downloadFile(filename, content, mimeType) {
@@ -2380,7 +2698,11 @@
       renderMainMap();
     });
 
-    // File Menu Dropdown
+    // Share Link & File Menu Dropdown
+    document.getElementById("btn-share-link").addEventListener("click", () => {
+      copyShareableLinkToClipboard();
+    });
+
     const fileBtn = document.getElementById("btn-file-menu");
     const fileMenu = document.getElementById("file-dropdown-menu");
     fileBtn.addEventListener("click", (e) => {
@@ -2389,6 +2711,10 @@
     });
     window.addEventListener("click", () => fileMenu.classList.add("hidden"));
 
+    document.getElementById("menu-export-link").addEventListener("click", () => {
+      copyShareableLinkToClipboard();
+    });
+
     document.getElementById("menu-export-yaml").addEventListener("click", () => {
       const yaml = serializeToYaml(appState);
       downloadFile(`${slugifyTitle(appState.title)}.yaml`, yaml, "text/yaml");
@@ -2396,7 +2722,7 @@
     });
 
     document.getElementById("menu-export-json").addEventListener("click", () => {
-      const json = JSON.stringify(appState, null, 2);
+      const json = serializeToJson(appState);
       downloadFile(`${slugifyTitle(appState.title)}.json`, json, "application/json");
       showToast("Saved map as JSON (.json)");
     });
@@ -3003,11 +3329,13 @@
   }
 
   // ==================== BOOTSTRAP ====================
-  function init() {
+  async function init() {
+    let hadExistingSavedMap = false;
     try {
       const savedRaw = localStorage.getItem(STORAGE_KEY_CURRENT);
       if (savedRaw) {
         appState = validateAndNormalizeState(JSON.parse(savedRaw));
+        hadExistingSavedMap = appState.rooms.length > 0;
       } else {
         appState = createDemoMapState();
         saveStateToLocal(false);
@@ -3020,10 +3348,47 @@
 
     bindEvents();
 
+    // Check if URL has a ?save=... parameter to auto-load
+    const urlParams = new URLSearchParams(window.location.search);
+    const saveParam = urlParams.get("save");
+    if (saveParam) {
+      try {
+        const sharedState = await decodeStateFromSaveParam(saveParam);
+        if (hadExistingSavedMap) {
+          pushUndoSnapshot();
+          createBackupSnapshot(`Before Shared Link (${appState.title || "Previous Map"})`, false);
+        }
+        appState = sharedState;
+        saveStateToLocal(false);
+        // Clean ?save=... from address bar so refreshing later doesn't overwrite subsequent edits
+        if (window.history && window.history.replaceState) {
+          urlParams.delete("save");
+          const cleanQuery = urlParams.toString();
+          const cleanUrl =
+            window.location.pathname + (cleanQuery ? `?${cleanQuery}` : "") + window.location.hash;
+          window.history.replaceState({}, document.title, cleanUrl);
+        }
+        requestAnimationFrame(() => {
+          renderAll();
+          showToast(
+            hadExistingSavedMap
+              ? `Loaded shared map "${appState.title}" (Your previous map was saved to Backups!)`
+              : `Loaded shared map "${appState.title}"`
+          );
+        });
+        return;
+      } catch (err) {
+        console.error("Failed to decode ?save= URL parameter:", err);
+        requestAnimationFrame(() => {
+          showToast("Could not decode ?save= link; loaded local map instead.");
+        });
+      }
+    }
+
     // Fit viewport nicely on initial load
     requestAnimationFrame(() => {
       const mainSvg = document.getElementById("map-svg");
-      if (!localStorage.getItem(STORAGE_KEY_CURRENT)) {
+      if (!hadExistingSavedMap) {
         fitMapViewport(mainSvg, appState.mapDisplayConfig.viewport);
       }
       renderAll();

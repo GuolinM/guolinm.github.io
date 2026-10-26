@@ -74,6 +74,8 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
 - Option to highlight/dim rooms on the canvas matching selected tag filters.
 
 ### Priority 5: Autosave, Backups & File Portability
-- **Instant Autosave:** Every change automatically saves to `localStorage` / `IndexedDB`.
-- **Rolling Backups / Snapshots:** Keeps a history of recent automatic snapshots (e.g., last 20 autosave states + timestamped checkpoints) so you can preview and restore an earlier version anytime.
-- **File Export / Import:** Save and load `.json` / `.yaml` files directly to disk (plus optional File System Access API "Save to disk file automatically" support on Chrome/Edge).
+- **Unified Save Schema (`SAVE_SCHEMA`):** Single canonical field-descriptor schema and intermediate state representation driving JSON export/import, YAML export/import, and Compact Share Link encoding/decoding so adding any future field updates all three formats automatically.
+- **Shareable Map Links (`?save=...`):** Compresses the canonical state into a dictionary-interned, room-indexed compact tuple format compressed with `deflate-raw` + Base64url (`?save=z....`). Opening a `?save=...` URL automatically backs up the user's existing local map into Backups first before loading the shared map.
+- **Instant Autosave:** Every change automatically saves to `localStorage` (`non_euclidean_mapper_current_v1`).
+- **Rolling Backups / Snapshots:** Keeps a history of recent automatic snapshots (`non_euclidean_mapper_backups_v1`, up to 25 autosave states + manual checkpoints) so you can preview and restore an earlier version anytime.
+- **File Export / Import:** Save and load `.json` / `.yaml` files directly to disk.
