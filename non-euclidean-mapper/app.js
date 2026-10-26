@@ -1320,24 +1320,17 @@
   }
 
   // ==================== DRAGGING & PAN/ZOOM INTERACTION ====================
-  function attachRoomDragAndSelect(nodeEl, roomId) {
-    let isDragging = false;
-    let hasMoved = false;
-    let startClientX = 0;
-    let startClientY = 0;
-    let dragGroupInitialPositions = new Map();
+  let activeRoomDrag = null;
+  let dragRafId = null;
 
+  function attachRoomDragAndSelect(nodeEl, roomId) {
     nodeEl.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
       e.stopPropagation();
-      isDragging = true;
-      hasMoved = false;
-      startClientX = e.clientX;
-      startClientY = e.clientY;
 
-      dragGroupInitialPositions = new Map();
       const isGroupDrag =
         isMultiSelectMode || multiSelectedRoomIds.has(roomId) || e.shiftKey;
+      const dragGroupInitialPositions = new Map();
 
       if (isGroupDrag) {
         const idsToMove = new Set(multiSelectedRoomIds);
@@ -1351,67 +1344,103 @@
         dragGroupInitialPositions.set(roomId, { x: p.x, y: p.y });
       }
       pushUndoSnapshot();
+
+      activeRoomDrag = {
+        roomId,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        dragGroupInitialPositions,
+        hasMoved: false,
+        isShift: Boolean(e.shiftKey),
+      };
     });
+  }
 
-    const onMouseMove = (e) => {
-      if (!isDragging) return;
-      const dxScreen = e.clientX - startClientX;
-      const dyScreen = e.clientY - startClientY;
-      if (!hasMoved && Math.hypot(dxScreen, dyScreen) > 4) {
-        hasMoved = true;
-        // If dragging a room while in Multi-Select mode, ensure it's part of the active selection set
-        if (isMultiSelectMode && !multiSelectedRoomIds.has(roomId)) {
-          multiSelectedRoomIds.add(roomId);
-          renderLeftSidebar();
-          renderInspector();
-        }
+  function handleGlobalRoomMouseMove(e) {
+    if (!activeRoomDrag) return;
+    const d = activeRoomDrag;
+    const dxScreen = e.clientX - d.startClientX;
+    const dyScreen = e.clientY - d.startClientY;
+
+    if (!d.hasMoved && Math.hypot(dxScreen, dyScreen) > 4) {
+      d.hasMoved = true;
+      // If dragging a room while in Multi-Select mode, ensure it's part of the active selection set
+      if (isMultiSelectMode && !multiSelectedRoomIds.has(d.roomId)) {
+        multiSelectedRoomIds.add(d.roomId);
+        renderLeftSidebar();
+        renderInspector();
       }
-      if (!hasMoved) return;
+    }
+    if (!d.hasMoved) return;
 
-      const zoom = appState.mapDisplayConfig.viewport.zoom || 1;
-      const dxWorld = dxScreen / zoom;
-      const dyWorld = dyScreen / zoom;
+    const zoom = appState.mapDisplayConfig.viewport.zoom || 1;
+    const dxWorld = dxScreen / zoom;
+    const dyWorld = dyScreen / zoom;
 
-      for (const [id, initPos] of dragGroupInitialPositions.entries()) {
-        setRoomPos(id, initPos.x + dxWorld, initPos.y + dyWorld);
+    for (const [id, initPos] of d.dragGroupInitialPositions.entries()) {
+      setRoomPos(id, Math.round(initPos.x + dxWorld), Math.round(initPos.y + dyWorld));
+    }
+
+    if (!dragRafId) {
+      dragRafId = requestAnimationFrame(() => {
+        dragRafId = null;
+        renderMainMap();
+      });
+    }
+  }
+
+  function handleGlobalRoomMouseUp(e) {
+    if (!activeRoomDrag) return;
+    if (dragRafId) {
+      cancelAnimationFrame(dragRafId);
+      dragRafId = null;
+    }
+    const d = activeRoomDrag;
+    activeRoomDrag = null;
+
+    if (!d.hasMoved) {
+      // Undo snapshot wasn't needed since room didn't move
+      undoStack.pop();
+      updateUndoButton();
+      if (isMultiSelectMode || d.isShift) {
+        toggleRoomInMultiSelect(d.roomId);
+      } else {
+        selectRoom(d.roomId);
       }
-      renderMainMap();
-    };
+      return;
+    }
 
-    const onMouseUp = (e) => {
-      if (!isDragging) return;
-      isDragging = false;
-
-      if (!hasMoved) {
-        // Undo snapshot wasn't needed since room didn't move
-        undoStack.pop();
-        updateUndoButton();
-        if (isMultiSelectMode || e.shiftKey) {
-          toggleRoomInMultiSelect(roomId);
-        } else {
-          selectRoom(roomId);
-        }
-        return;
+    // If single room was moved, nudge if it directly collides; if a multi-select group was moved,
+    // preserve relative positions among all moved rooms.
+    if (d.dragGroupInitialPositions.size === 1) {
+      const droppedPos = getRoomPos(d.roomId);
+      const overlapping = findOverlappingRoom(droppedPos.x, droppedPos.y, d.roomId);
+      if (overlapping) {
+        const free = findNearestFreePosition(droppedPos.x, droppedPos.y, d.roomId);
+        setRoomPos(d.roomId, free.x, free.y);
+        showToast("Nudged room slightly to avoid overlap");
       }
+    }
 
-      // If single room was moved, nudge if it directly collides; if a multi-select group was moved,
-      // preserve relative positions among all moved rooms.
-      if (dragGroupInitialPositions.size === 1) {
-        const droppedPos = getRoomPos(roomId);
-        const overlapping = findOverlappingRoom(droppedPos.x, droppedPos.y, roomId);
-        if (overlapping) {
-          const free = findNearestFreePosition(droppedPos.x, droppedPos.y, roomId);
-          setRoomPos(roomId, free.x, free.y);
-          showToast("Nudged room slightly to avoid overlap");
-        }
+    saveStateToLocal();
+    renderMainMap();
+  }
+
+  function updateViewportTransform(isNested = false) {
+    const vp = isNested ? connModalState.nestedViewport : appState.mapDisplayConfig.viewport;
+    const vpGroup = document.getElementById(isNested ? "nested-map-viewport" : "map-viewport");
+    if (vpGroup && vp) {
+      vpGroup.setAttribute(
+        "transform",
+        `translate(${vp.panX}, ${vp.panY}) scale(${vp.zoom})`
+      );
+    }
+    if (!isNested) {
+      const zoomText = document.getElementById("zoom-level-text");
+      if (zoomText && vp) {
+        zoomText.textContent = `${Math.round(vp.zoom * 100)}%`;
       }
-
-      saveStateToLocal();
-      renderMainMap();
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    }
   }
 
   function setupPanAndZoom(svgEl, getViewport, onUpdate) {
@@ -3031,12 +3060,16 @@
     const mainSvg = document.getElementById("map-svg");
     const nestedSvg = document.getElementById("nested-map-svg");
 
-    // Pan & Zoom on Main Map
+    // Global room dragging listeners (single pair bound once for app lifetime)
+    window.addEventListener("mousemove", handleGlobalRoomMouseMove);
+    window.addEventListener("mouseup", handleGlobalRoomMouseUp);
+
+    // Pan & Zoom on Main Map (uses fast GPU matrix transform during panning)
     setupPanAndZoom(
       mainSvg,
       () => appState.mapDisplayConfig.viewport,
       (shouldSave) => {
-        renderMainMap();
+        updateViewportTransform(false);
         if (shouldSave) saveStateToLocal(false);
       }
     );
@@ -3046,7 +3079,7 @@
       nestedSvg,
       () => connModalState.nestedViewport,
       () => {
-        renderConnectionModalUI();
+        updateViewportTransform(true);
       }
     );
 
