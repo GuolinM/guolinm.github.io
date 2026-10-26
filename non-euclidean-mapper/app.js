@@ -67,6 +67,8 @@
   let undoStack = [];
   let selectedRoomId = null;
   let selectedConnectionId = null;
+  let isMultiSelectMode = false;
+  let multiSelectedRoomIds = new Set();
 
   // Search & Filter state (Priority 4)
   let searchQuery = "";
@@ -937,14 +939,16 @@
     }
 
     // 1. Render Connections (Warps always rendered below everything else)
+    const isRoomHighlightedForConn = (rId) =>
+      Boolean(rId) && (selectedRoomId === rId || multiSelectedRoomIds.has(rId));
+
     const sortedConnections = [...appState.connections].sort((a, b) => {
       const getLayerRank = (c) => {
         if (!isNestedPicker && selectedConnectionId === c.id) return 3;
         if (c.style !== "warp") return 2;
         if (
           !isNestedPicker &&
-          selectedRoomId &&
-          (c.fromRoomId === selectedRoomId || c.toRoomId === selectedRoomId)
+          (isRoomHighlightedForConn(c.fromRoomId) || isRoomHighlightedForConn(c.toRoomId))
         ) {
           return 1;
         }
@@ -972,8 +976,7 @@
       const isSelected = !isNestedPicker && selectedConnectionId === conn.id;
       const isAttachedToSelectedRoom =
         !isNestedPicker &&
-        Boolean(selectedRoomId) &&
-        (conn.fromRoomId === selectedRoomId || conn.toRoomId === selectedRoomId);
+        (isRoomHighlightedForConn(conn.fromRoomId) || isRoomHighlightedForConn(conn.toRoomId));
 
       const classes = ["conn-group"];
       if (!conn.bidirectional) classes.push("oneway");
@@ -1054,6 +1057,7 @@
     for (const room of appState.rooms) {
       const pos = getRoomPos(room.id);
       const isSelected = !isNestedPicker && selectedRoomId === room.id;
+      const isMultiSelected = !isNestedPicker && multiSelectedRoomIds.has(room.id);
       const isNestedFrom = isNestedPicker && connModalState.fromRoomId === room.id;
       const isNestedTo = isNestedPicker && connModalState.toRoomId === room.id;
 
@@ -1066,6 +1070,7 @@
 
       const nodeClasses = ["room-node"];
       if (isSelected || isNestedFrom || isNestedTo) nodeClasses.push("selected");
+      if (isMultiSelected) nodeClasses.push("multi-selected");
       if ((isFilteringMain || isFilteringNested) && !matchesFilter) nodeClasses.push("dimmed");
       if ((isFilteringMain || isFilteringNested) && matchesFilter) nodeClasses.push("search-match");
 
@@ -1170,8 +1175,8 @@
         g.appendChild(moreTxt);
       }
 
-      // Quick "+ Branch Room" button on main map node
-      if (!isNestedPicker) {
+      // Quick "+ Branch Room" button on main map node (hidden while in Multi-Select mode)
+      if (!isNestedPicker && !isMultiSelectMode && multiSelectedRoomIds.size === 0) {
         const quickBtn = createSvgEl("g", {
           class: "room-quick-add-btn",
           transform: `translate(${NODE_W}, ${NODE_H / 2})`,
@@ -1231,8 +1236,7 @@
     let hasMoved = false;
     let startClientX = 0;
     let startClientY = 0;
-    let initialRoomX = 0;
-    let initialRoomY = 0;
+    let dragGroupInitialPositions = new Map();
 
     nodeEl.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
@@ -1241,9 +1245,22 @@
       hasMoved = false;
       startClientX = e.clientX;
       startClientY = e.clientY;
-      const pos = getRoomPos(roomId);
-      initialRoomX = pos.x;
-      initialRoomY = pos.y;
+
+      dragGroupInitialPositions = new Map();
+      const isGroupDrag =
+        isMultiSelectMode || multiSelectedRoomIds.has(roomId) || e.shiftKey;
+
+      if (isGroupDrag) {
+        const idsToMove = new Set(multiSelectedRoomIds);
+        idsToMove.add(roomId);
+        for (const id of idsToMove) {
+          const p = getRoomPos(id);
+          dragGroupInitialPositions.set(id, { x: p.x, y: p.y });
+        }
+      } else {
+        const p = getRoomPos(roomId);
+        dragGroupInitialPositions.set(roomId, { x: p.x, y: p.y });
+      }
       pushUndoSnapshot();
     });
 
@@ -1251,19 +1268,28 @@
       if (!isDragging) return;
       const dxScreen = e.clientX - startClientX;
       const dyScreen = e.clientY - startClientY;
-      if (Math.hypot(dxScreen, dyScreen) > 4) {
+      if (!hasMoved && Math.hypot(dxScreen, dyScreen) > 4) {
         hasMoved = true;
+        // If dragging a room while in Multi-Select mode, ensure it's part of the active selection set
+        if (isMultiSelectMode && !multiSelectedRoomIds.has(roomId)) {
+          multiSelectedRoomIds.add(roomId);
+          renderLeftSidebar();
+          renderInspector();
+        }
       }
       if (!hasMoved) return;
 
       const zoom = appState.mapDisplayConfig.viewport.zoom || 1;
-      const newX = initialRoomX + dxScreen / zoom;
-      const newY = initialRoomY + dyScreen / zoom;
-      setRoomPos(roomId, newX, newY);
+      const dxWorld = dxScreen / zoom;
+      const dyWorld = dyScreen / zoom;
+
+      for (const [id, initPos] of dragGroupInitialPositions.entries()) {
+        setRoomPos(id, initPos.x + dxWorld, initPos.y + dyWorld);
+      }
       renderMainMap();
     };
 
-    const onMouseUp = () => {
+    const onMouseUp = (e) => {
       if (!isDragging) return;
       isDragging = false;
 
@@ -1271,17 +1297,24 @@
         // Undo snapshot wasn't needed since room didn't move
         undoStack.pop();
         updateUndoButton();
-        selectRoom(roomId);
+        if (isMultiSelectMode || e.shiftKey) {
+          toggleRoomInMultiSelect(roomId);
+        } else {
+          selectRoom(roomId);
+        }
         return;
       }
 
-      // Check if dropped room directly collides with another room; if so, nudge the other room or this room
-      const droppedPos = getRoomPos(roomId);
-      const overlapping = findOverlappingRoom(droppedPos.x, droppedPos.y, roomId);
-      if (overlapping) {
-        const free = findNearestFreePosition(droppedPos.x, droppedPos.y, roomId);
-        setRoomPos(roomId, free.x, free.y);
-        showToast("Nudged room slightly to avoid overlap");
+      // If single room was moved, nudge if it directly collides; if a multi-select group was moved,
+      // preserve relative positions among all moved rooms.
+      if (dragGroupInitialPositions.size === 1) {
+        const droppedPos = getRoomPos(roomId);
+        const overlapping = findOverlappingRoom(droppedPos.x, droppedPos.y, roomId);
+        if (overlapping) {
+          const free = findNearestFreePosition(droppedPos.x, droppedPos.y, roomId);
+          setRoomPos(roomId, free.x, free.y);
+          showToast("Nudged room slightly to avoid overlap");
+        }
       }
 
       saveStateToLocal();
@@ -1294,24 +1327,68 @@
 
   function setupPanAndZoom(svgEl, getViewport, onUpdate) {
     let isPanning = false;
+    let isBoxSelecting = false;
     let hasMoved = false;
     let panStartX = 0;
     let panStartY = 0;
     let startPanX = 0;
     let startPanY = 0;
+    let boxStartScreenX = 0;
+    let boxStartScreenY = 0;
+    const isMainMap = svgEl && svgEl.id === "map-svg";
 
     svgEl.addEventListener("mousedown", (e) => {
       if (e.button !== 0 && e.button !== 1) return;
-      isPanning = true;
       hasMoved = false;
-      const vp = getViewport();
       panStartX = e.clientX;
       panStartY = e.clientY;
+
+      // On main map, left-dragging on empty canvas while in Multi-Select mode (or holding Shift) draws a selection box
+      if (
+        isMainMap &&
+        e.button === 0 &&
+        (isMultiSelectMode || e.shiftKey) &&
+        (e.target === svgEl || e.target.id === "grid-bg")
+      ) {
+        isBoxSelecting = true;
+        const rect = svgEl.getBoundingClientRect();
+        boxStartScreenX = e.clientX - rect.left;
+        boxStartScreenY = e.clientY - rect.top;
+        return;
+      }
+
+      isPanning = true;
+      const vp = getViewport();
       startPanX = vp.panX;
       startPanY = vp.panY;
     });
 
     window.addEventListener("mousemove", (e) => {
+      if (isBoxSelecting) {
+        const dx = e.clientX - panStartX;
+        const dy = e.clientY - panStartY;
+        if (!hasMoved && Math.hypot(dx, dy) < 4) return;
+        hasMoved = true;
+
+        const rect = svgEl.getBoundingClientRect();
+        const curX = e.clientX - rect.left;
+        const curY = e.clientY - rect.top;
+        const x = Math.min(boxStartScreenX, curX);
+        const y = Math.min(boxStartScreenY, curY);
+        const w = Math.abs(curX - boxStartScreenX);
+        const h = Math.abs(curY - boxStartScreenY);
+
+        const boxEl = document.getElementById("marquee-select-box");
+        if (boxEl) {
+          boxEl.classList.remove("hidden");
+          boxEl.setAttribute("x", String(Math.round(x)));
+          boxEl.setAttribute("y", String(Math.round(y)));
+          boxEl.setAttribute("width", String(Math.round(w)));
+          boxEl.setAttribute("height", String(Math.round(h)));
+        }
+        return;
+      }
+
       if (!isPanning) return;
       const dx = e.clientX - panStartX;
       const dy = e.clientY - panStartY;
@@ -1324,7 +1401,44 @@
       onUpdate(false);
     });
 
-    window.addEventListener("mouseup", () => {
+    window.addEventListener("mouseup", (e) => {
+      if (isBoxSelecting) {
+        isBoxSelecting = false;
+        const boxEl = document.getElementById("marquee-select-box");
+        if (boxEl) boxEl.classList.add("hidden");
+
+        if (hasMoved) {
+          const rect = svgEl.getBoundingClientRect();
+          const curX = e.clientX - rect.left;
+          const curY = e.clientY - rect.top;
+          const vp = getViewport();
+          const minWorldX = (Math.min(boxStartScreenX, curX) - vp.panX) / vp.zoom;
+          const maxWorldX = (Math.max(boxStartScreenX, curX) - vp.panX) / vp.zoom;
+          const minWorldY = (Math.min(boxStartScreenY, curY) - vp.panY) / vp.zoom;
+          const maxWorldY = (Math.max(boxStartScreenY, curY) - vp.panY) / vp.zoom;
+
+          if (!e.shiftKey) {
+            // Keep existing selection if already in Multi-Select mode, or add rooms inside box
+          }
+          isMultiSelectMode = true;
+          if (selectedRoomId) {
+            multiSelectedRoomIds.add(selectedRoomId);
+            selectedRoomId = null;
+          }
+          selectedConnectionId = null;
+
+          for (const r of appState.rooms) {
+            const p = getRoomPos(r.id);
+            if (p.x >= minWorldX && p.x <= maxWorldX && p.y >= minWorldY && p.y <= maxWorldY) {
+              multiSelectedRoomIds.add(r.id);
+            }
+          }
+          renderAll();
+        }
+        hasMoved = false;
+        return;
+      }
+
       if (!isPanning) return;
       isPanning = false;
       svgEl.classList.remove("panning");
@@ -1505,8 +1619,10 @@
 
     resultsEl.innerHTML = "";
     for (const room of matchingRooms) {
+      const isRoomSelected =
+        selectedRoomId === room.id || multiSelectedRoomIds.has(room.id);
       const item = document.createElement("div");
-      item.className = "room-list-item" + (selectedRoomId === room.id ? " selected" : "");
+      item.className = "room-list-item" + (isRoomSelected ? " selected" : "");
       item.innerHTML = `
         <div class="room-item-top">
           <span class="room-color-dot" style="background: ${room.color || ROOM_COLORS[0]}"></span>
@@ -1525,9 +1641,13 @@
             : ""
         }
       `;
-      item.addEventListener("click", () => {
-        selectRoom(room.id);
-        centerCameraOnRoom(room.id);
+      item.addEventListener("click", (e) => {
+        if (isMultiSelectMode || e.shiftKey) {
+          toggleRoomInMultiSelect(room.id);
+        } else {
+          selectRoom(room.id);
+          centerCameraOnRoom(room.id);
+        }
       });
       resultsEl.appendChild(item);
     }
@@ -1535,8 +1655,61 @@
 
   function renderInspector() {
     const emptyEl = document.getElementById("inspector-empty");
+    const multiEl = document.getElementById("inspector-multiselect");
     const roomEl = document.getElementById("inspector-room");
     const connEl = document.getElementById("inspector-connection");
+
+    const multiBtn = document.getElementById("btn-multi-select");
+    const multiBtnLbl = document.getElementById("multi-select-btn-label");
+    const inMultiMode = isMultiSelectMode || multiSelectedRoomIds.size > 0;
+    if (multiBtn) {
+      multiBtn.classList.toggle("active", inMultiMode);
+    }
+    if (multiBtnLbl) {
+      multiBtnLbl.textContent =
+        multiSelectedRoomIds.size > 0
+          ? `Multi-Select (${multiSelectedRoomIds.size})`
+          : "Multi-Select";
+    }
+
+    if (inMultiMode) {
+      emptyEl.classList.add("hidden");
+      roomEl.classList.add("hidden");
+      connEl.classList.add("hidden");
+      if (multiEl) {
+        multiEl.classList.remove("hidden");
+        document.getElementById("multiselect-count").textContent = String(
+          multiSelectedRoomIds.size
+        );
+        const listEl = document.getElementById("multiselect-rooms-list");
+        listEl.innerHTML = "";
+        if (multiSelectedRoomIds.size === 0) {
+          listEl.innerHTML = `<span class="muted-hint">No rooms selected yet. Click rooms on the map or drag a selection box!</span>`;
+        } else {
+          for (const rId of multiSelectedRoomIds) {
+            const r = getRoomById(rId);
+            if (!r) continue;
+            const row = document.createElement("div");
+            row.className = "conn-item-card";
+            row.innerHTML = `
+              <div class="room-item-top" style="gap: 8px;">
+                <span class="room-color-dot" style="background: ${r.color || ROOM_COLORS[0]}"></span>
+                <span style="font-size: 12.5px; font-weight: 600;">${escapeHtml(r.name)}</span>
+              </div>
+              <button type="button" class="btn btn-xs btn-ghost remove-multi-btn" title="Deselect room">&times;</button>
+            `;
+            row.querySelector(".remove-multi-btn").addEventListener("click", () => {
+              multiSelectedRoomIds.delete(r.id);
+              renderAll();
+            });
+            listEl.appendChild(row);
+          }
+        }
+      }
+      return;
+    }
+
+    if (multiEl) multiEl.classList.add("hidden");
 
     const selectedRoom = selectedRoomId ? getRoomById(selectedRoomId) : null;
     const selectedConn = selectedConnectionId ? getConnectionById(selectedConnectionId) : null;
@@ -1723,20 +1896,61 @@
   }
 
   function selectRoom(roomId) {
+    isMultiSelectMode = false;
+    multiSelectedRoomIds.clear();
     selectedRoomId = roomId;
     selectedConnectionId = null;
     renderAll();
   }
 
   function selectConnection(connId) {
+    isMultiSelectMode = false;
+    multiSelectedRoomIds.clear();
     selectedConnectionId = connId;
     selectedRoomId = null;
     renderAll();
   }
 
   function clearSelection() {
+    isMultiSelectMode = false;
+    multiSelectedRoomIds.clear();
     selectedRoomId = null;
     selectedConnectionId = null;
+    renderAll();
+  }
+
+  function toggleMultiSelectMode(forceState = null) {
+    const nextState =
+      typeof forceState === "boolean" ? forceState : !isMultiSelectMode && multiSelectedRoomIds.size === 0;
+    if (nextState) {
+      isMultiSelectMode = true;
+      if (selectedRoomId) {
+        multiSelectedRoomIds.add(selectedRoomId);
+        selectedRoomId = null;
+      }
+      selectedConnectionId = null;
+      showToast("Multi-Select active: Click rooms or drag a box, then drag any selected room to move together");
+    } else {
+      isMultiSelectMode = false;
+      multiSelectedRoomIds.clear();
+    }
+    renderAll();
+  }
+
+  function toggleRoomInMultiSelect(roomId) {
+    if (!isMultiSelectMode) {
+      isMultiSelectMode = true;
+      if (selectedRoomId && selectedRoomId !== roomId) {
+        multiSelectedRoomIds.add(selectedRoomId);
+      }
+      selectedRoomId = null;
+      selectedConnectionId = null;
+    }
+    if (multiSelectedRoomIds.has(roomId)) {
+      multiSelectedRoomIds.delete(roomId);
+    } else {
+      multiSelectedRoomIds.add(roomId);
+    }
     renderAll();
   }
 
@@ -2685,7 +2899,12 @@
         bgMouseDownPos &&
         Math.hypot(e.clientX - bgMouseDownPos.x, e.clientY - bgMouseDownPos.y) < 5
       ) {
-        clearSelection();
+        if (isMultiSelectMode && multiSelectedRoomIds.size > 0) {
+          multiSelectedRoomIds.clear();
+          renderAll();
+        } else {
+          clearSelection();
+        }
       }
       bgMouseDownPos = null;
     });
@@ -2727,6 +2946,25 @@
 
     document.getElementById("btn-undo").addEventListener("click", performUndo);
     document.getElementById("btn-auto-arrange").addEventListener("click", autoArrangeMap);
+    document.getElementById("btn-multi-select").addEventListener("click", () => {
+      toggleMultiSelectMode();
+    });
+    document.getElementById("btn-close-multiselect").addEventListener("click", () => {
+      toggleMultiSelectMode(false);
+    });
+    document.getElementById("btn-multiselect-all").addEventListener("click", () => {
+      isMultiSelectMode = true;
+      selectedRoomId = null;
+      selectedConnectionId = null;
+      appState.rooms
+        .filter((r) => doesRoomMatchSearchAndFilter(r, searchQuery, activeTagFilters))
+        .forEach((r) => multiSelectedRoomIds.add(r.id));
+      renderAll();
+    });
+    document.getElementById("btn-multiselect-clear").addEventListener("click", () => {
+      multiSelectedRoomIds.clear();
+      renderAll();
+    });
 
     // Zoom HUD buttons
     document.getElementById("btn-zoom-in").addEventListener("click", () => {
@@ -3364,6 +3602,9 @@
       } else if (e.key.toLowerCase() === "c") {
         e.preventDefault();
         openAddConnectionModal(selectedRoomId);
+      } else if (e.key.toLowerCase() === "m") {
+        e.preventDefault();
+        toggleMultiSelectMode();
       } else if (e.key === "/" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f")) {
         e.preventDefault();
         document.getElementById("search-input").focus();

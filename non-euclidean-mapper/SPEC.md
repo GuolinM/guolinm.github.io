@@ -51,6 +51,7 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
 ### Priority 1: Interactive Draggable Map Canvas
 - Infinite pan & zoom canvas (mouse drag to pan, scroll wheel to zoom).
 - **Stable Layout:** Every room has persistent `(x, y)` coordinates saved in `mapDisplayConfig`. Adding new rooms or connections **never** resets existing room positions.
+- **Multi-Select Group Move (`M` or `Shift+Click`):** Toggleable **Multi-Select** button in the top toolbar (plus `Shift+Click` on rooms or marquee drag-box selection) to select multiple rooms and drag them and their connections all at once as a group, while keeping room editing disabled in the Inspector.
 - **Smart Collision / Placement:** New rooms spawn near the currently selected/connected room at an open spot; if two rooms overlap, gently nudge the unpinned/new room or offer an optional local relax/rearrange button without scrambling the whole map.
 - Visual distinction between **two-way connections** (solid line) and **one-way connections** (directed arrow / dashed line), plus self-loops or long-distance warps.
 

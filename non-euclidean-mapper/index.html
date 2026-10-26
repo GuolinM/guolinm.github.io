@@ -64,6 +64,14 @@
           </svg>
           Rearrange
         </button>
+
+        <button id="btn-multi-select" class="btn btn-ghost" title="Toggle Multi-Select mode to select &amp; move multiple rooms at once (Shortcut: M or Shift+Click)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="13" height="13" rx="2" stroke-dasharray="3 2"></rect>
+            <path d="M9 19h10a2 2 0 0 0 2-2V9"></path>
+          </svg>
+          <span id="multi-select-btn-label">Multi-Select</span> <kbd>M</kbd>
+        </button>
       </div>
 
       <div class="toolbar-right">
@@ -208,6 +216,7 @@
             <g id="connections-layer"></g>
             <g id="rooms-layer"></g>
           </g>
+          <rect id="marquee-select-box" class="marquee-select-box hidden" x="0" y="0" width="0" height="0" />
         </svg>
 
         <!-- Empty State Overlay -->
@@ -258,8 +267,44 @@
           <div class="quick-tips">
             <div><kbd>N</kbd> Add new room</div>
             <div><kbd>C</kbd> Add connection</div>
+            <div><kbd>M</kbd> Multi-select &amp; move</div>
             <div><kbd>/</kbd> Search rooms &amp; tags</div>
             <div><kbd>Del</kbd> Delete selected</div>
+          </div>
+        </div>
+
+        <!-- Multi-Select Read-Only Summary (No editing allowed) -->
+        <div id="inspector-multiselect" class="inspector-content hidden">
+          <div class="sidebar-header">
+            <h2>Multi-Select Move</h2>
+            <button id="btn-close-multiselect" class="icon-btn" title="Exit Multi-Select (Esc)">&times;</button>
+          </div>
+          <div class="inspector-body">
+            <div class="inspector-card">
+              <div class="card-title-row">
+                <h4><span id="multiselect-count">0</span> Rooms Selected</h4>
+              </div>
+              <p class="card-subtext">
+                Click rooms (or drag a box on the canvas) to select/deselect them, then <strong>drag any selected room</strong> to move all selected rooms and their connections together.
+              </p>
+              <p class="card-subtext" style="color: var(--text-muted); font-size: 11px;">
+                Room editing is disabled while multiple rooms are selected.
+              </p>
+              <div class="quick-actions-row" style="margin-top: 4px;">
+                <button id="btn-multiselect-all" type="button" class="btn btn-secondary btn-sm full-width">
+                  Select All Visible Rooms
+                </button>
+                <button id="btn-multiselect-clear" type="button" class="btn btn-ghost btn-sm full-width">
+                  Clear Selection
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <div class="section-label-row">
+                <label>Selected Rooms</label>
+              </div>
+              <div id="multiselect-rooms-list" class="inspector-conn-list"></div>
+            </div>
           </div>
         </div>
 
