@@ -1321,7 +1321,6 @@
 
   // ==================== DRAGGING & PAN/ZOOM INTERACTION ====================
   let activeRoomDrag = null;
-  let dragRafId = null;
 
   function attachRoomDragAndSelect(nodeEl, roomId) {
     nodeEl.addEventListener("mousedown", (e) => {
@@ -1381,20 +1380,11 @@
       setRoomPos(id, Math.round(initPos.x + dxWorld), Math.round(initPos.y + dyWorld));
     }
 
-    if (!dragRafId) {
-      dragRafId = requestAnimationFrame(() => {
-        dragRafId = null;
-        renderMainMap();
-      });
-    }
+    renderMainMap();
   }
 
   function handleGlobalRoomMouseUp(e) {
     if (!activeRoomDrag) return;
-    if (dragRafId) {
-      cancelAnimationFrame(dragRafId);
-      dragRafId = null;
-    }
     const d = activeRoomDrag;
     activeRoomDrag = null;
 
@@ -1424,23 +1414,6 @@
 
     saveStateToLocal();
     renderMainMap();
-  }
-
-  function updateViewportTransform(isNested = false) {
-    const vp = isNested ? connModalState.nestedViewport : appState.mapDisplayConfig.viewport;
-    const vpGroup = document.getElementById(isNested ? "nested-map-viewport" : "map-viewport");
-    if (vpGroup && vp) {
-      vpGroup.setAttribute(
-        "transform",
-        `translate(${vp.panX}, ${vp.panY}) scale(${vp.zoom})`
-      );
-    }
-    if (!isNested) {
-      const zoomText = document.getElementById("zoom-level-text");
-      if (zoomText && vp) {
-        zoomText.textContent = `${Math.round(vp.zoom * 100)}%`;
-      }
-    }
   }
 
   function setupPanAndZoom(svgEl, getViewport, onUpdate) {
@@ -3064,12 +3037,12 @@
     window.addEventListener("mousemove", handleGlobalRoomMouseMove);
     window.addEventListener("mouseup", handleGlobalRoomMouseUp);
 
-    // Pan & Zoom on Main Map (uses fast GPU matrix transform during panning)
+    // Pan & Zoom on Main Map
     setupPanAndZoom(
       mainSvg,
       () => appState.mapDisplayConfig.viewport,
       (shouldSave) => {
-        updateViewportTransform(false);
+        renderMainMap();
         if (shouldSave) saveStateToLocal(false);
       }
     );
@@ -3079,7 +3052,7 @@
       nestedSvg,
       () => connModalState.nestedViewport,
       () => {
-        updateViewportTransform(true);
+        renderConnectionModalUI();
       }
     );
 
