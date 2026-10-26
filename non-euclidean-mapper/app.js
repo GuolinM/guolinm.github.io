@@ -1795,7 +1795,7 @@
     };
     renderNewRoomSwatches();
 
-    // Existing tag suggestions
+    // Existing tag suggestions with live prefix highlighting
     const existingTagsWrap = document.getElementById("new-room-existing-tags");
     const allTags = new Set();
     appState.rooms.forEach((r) => (r.tags || []).forEach((t) => allTags.add(t)));
@@ -1804,22 +1804,71 @@
       const chip = document.createElement("button");
       chip.type = "button";
       chip.className = "chip-btn";
+      chip.setAttribute("data-tag", t);
       chip.textContent = `+ #${t}`;
       chip.addEventListener("click", () => {
         const input = document.getElementById("new-room-tags");
-        const cur = input.value
-          .split(",")
-          .map((s) => s.trim())
+        const rawSegments = input.value.split(",");
+        const lastRaw = rawSegments[rawSegments.length - 1] || "";
+        const partial = lastRaw.trim().replace(/^#/, "").toLowerCase();
+        const completed = rawSegments
+          .slice(0, -1)
+          .map((s) => s.trim().replace(/^#/, ""))
           .filter(Boolean);
-        if (!cur.includes(t)) {
-          cur.push(t);
-          input.value = cur.join(", ");
+
+        // If the user was in the middle of typing a prefix of this tag, replace that partial fragment;
+        // otherwise keep the last segment if it's a non-empty distinct tag.
+        const lastClean = lastRaw.trim().replace(/^#/, "");
+        if (lastClean && !t.toLowerCase().startsWith(partial)) {
+          if (!completed.includes(lastClean)) completed.push(lastClean);
         }
+        if (!completed.includes(t)) {
+          completed.push(t);
+        }
+        input.value = completed.join(", ") + ", ";
+        input.focus();
+        updateNewRoomTagHighlights();
       });
       existingTagsWrap.appendChild(chip);
     }
+    updateNewRoomTagHighlights();
 
     setTimeout(() => document.getElementById("new-room-name").focus(), 30);
+  }
+
+  function updateNewRoomTagHighlights() {
+    const input = document.getElementById("new-room-tags");
+    const existingTagsWrap = document.getElementById("new-room-existing-tags");
+    if (!input || !existingTagsWrap) return;
+
+    const rawSegments = input.value.split(",");
+    const lastSegment = (rawSegments[rawSegments.length - 1] || "")
+      .trim()
+      .replace(/^#/, "")
+      .toLowerCase();
+
+    const enteredTags = new Set(
+      rawSegments
+        .slice(0, -1)
+        .map((s) => s.trim().replace(/^#/, "").toLowerCase())
+        .filter(Boolean)
+    );
+
+    const chips = existingTagsWrap.querySelectorAll(".chip-btn[data-tag]");
+    chips.forEach((chip) => {
+      const tag = (chip.getAttribute("data-tag") || "").toLowerCase();
+      const rawTag = chip.getAttribute("data-tag") || "";
+      const isAlreadyAdded = enteredTags.has(tag) || (rawSegments.length === 1 && tag === lastSegment && input.value.trim().endsWith(","));
+      const isPrefixMatch = lastSegment.length > 0 && tag.startsWith(lastSegment) && !enteredTags.has(tag);
+
+      chip.classList.toggle("tag-already-added", isAlreadyAdded);
+      chip.classList.toggle("tag-prefix-match", isPrefixMatch);
+      chip.classList.toggle(
+        "tag-prefix-dimmed",
+        lastSegment.length > 0 && !isPrefixMatch && !isAlreadyAdded
+      );
+      chip.textContent = isAlreadyAdded ? `✓ #${rawTag}` : `+ #${rawTag}`;
+    });
   }
 
   function closeAddRoomModal() {
@@ -3093,6 +3142,10 @@
           revInput.value = btn.getAttribute("data-rev") || "";
         }
       });
+    });
+
+    document.getElementById("new-room-tags").addEventListener("input", () => {
+      updateNewRoomTagHighlights();
     });
 
     document.getElementById("form-add-room").addEventListener("submit", (e) => {
