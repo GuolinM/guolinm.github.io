@@ -79,10 +79,11 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
   - Dedicated **Edit (Pencil) icon buttons** to the right of each node name (`From` and `To`) to immediately inspect and edit the room's details (name, color, tags, notes), with auto-focus and a seamless `← Connection` back-button to return directly to the connection inspector.
   - Allows swapping endpoints, toggling directionality, setting passage style (Normal vs. Warp), editing exit/return labels, and editing connection notes.
 
-### Priority 4: Search & Filter by Tag or Name
-- Persistent search bar (`Ctrl+F` / `/`) that filters rooms by **name**, **description**, or **tags**.
-- Clicking a search result centers and highlights the room on the map.
-- Option to highlight/dim rooms on the canvas matching selected tag filters.
+### Priority 4: Search & Filter by Room & Connection
+- Persistent search bar (`Ctrl+F` / `/`) that filters rooms and connections by **room name**, **description**, **tags**, **connection labels**, **reverse labels**, **passage style**, or **connection notes**.
+- Left sidebar search results display matching rooms and matching connections in dedicated sections, with quick-select and camera centering.
+- Responsive canvas dimming: non-matching rooms and connections are dimmed (opacity 0.12), while matching rooms and matching connections are highlighted. Direct connection matches glow emerald green (`#10b981`) with highlighted green arrowheads.
+- Multi-tag filtering: selecting tag pills filters the canvas so only rooms with active tags and connections between matching rooms remain illuminated; connections attached to non-matching rooms are dimmed.
 
 ### Priority 5: Autosave, Backups & File Portability
 - **Unified Save Schema (`SAVE_SCHEMA`):** Single canonical field-descriptor schema and intermediate state representation driving JSON export/import, YAML export/import, and Compact Share Link encoding/decoding so adding any future field updates all three formats automatically.

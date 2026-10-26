@@ -954,6 +954,50 @@
     parentGroup.appendChild(label);
   }
 
+  function isConnectionDirectMatch(conn, queryStr) {
+    if (!queryStr || queryStr.trim() === "") return false;
+    const q = queryStr.trim().toLowerCase();
+    if (conn.label && conn.label.toLowerCase().includes(q)) return true;
+    if (conn.reverseLabel && conn.reverseLabel.toLowerCase().includes(q)) return true;
+    if (conn.notes && conn.notes.toLowerCase().includes(q)) return true;
+    if (conn.style && conn.style.toLowerCase().includes(q)) return true;
+    if (conn.style === "warp" && ("portal".includes(q) || "teleport".includes(q))) return true;
+    return false;
+  }
+
+  function doesConnectionMatchSearchAndFilter(conn, queryStr = searchQuery, tagSet = activeTagFilters) {
+    const fromRoom = getRoomById(conn.fromRoomId);
+    const toRoom = getRoomById(conn.toRoomId);
+    if (!fromRoom || !toRoom) return false;
+
+    const hasTags = Boolean(tagSet && tagSet.size > 0);
+    const hasQuery = Boolean(queryStr && queryStr.trim() !== "");
+
+    // 1. Tag Filtering:
+    // When tag filters are active, an edge matches if both endpoints match the tag filter.
+    if (hasTags) {
+      const fromHasTags = doesRoomMatchSearchAndFilter(fromRoom, null, tagSet);
+      const toHasTags = doesRoomMatchSearchAndFilter(toRoom, null, tagSet);
+      if (!fromHasTags || !toHasTags) return false;
+    }
+
+    // 2. Query Search:
+    if (hasQuery) {
+      const q = queryStr.trim().toLowerCase();
+      // Direct connection match (label, reverseLabel, notes, style)
+      if (isConnectionDirectMatch(conn, queryStr)) return true;
+      // Endpoint room name match
+      if (fromRoom.name.toLowerCase().includes(q) || toRoom.name.toLowerCase().includes(q)) return true;
+      // Both endpoints match the room search query
+      if (doesRoomMatchSearchAndFilter(fromRoom, queryStr, null) && doesRoomMatchSearchAndFilter(toRoom, queryStr, null)) {
+        return true;
+      }
+      return false;
+    }
+
+    return true;
+  }
+
   function doesRoomMatchSearchAndFilter(room, queryStr = searchQuery, tagSet = activeTagFilters) {
     if (tagSet && tagSet.size > 0) {
       const roomTags = room.tags || [];
@@ -966,7 +1010,19 @@
       const nameMatch = room.name.toLowerCase().includes(q);
       const descMatch = (room.description || "").toLowerCase().includes(q);
       const tagMatch = (room.tags || []).some((t) => t.toLowerCase().includes(q));
-      return nameMatch || descMatch || tagMatch;
+      if (nameMatch || descMatch || tagMatch) return true;
+
+      // Also illuminate this room if it's connected to an edge that directly matches the query (e.g. searching by exit label or warp)
+      if (appState && Array.isArray(appState.connections)) {
+        const hasMatchingConn = appState.connections.some(
+          (c) =>
+            (c.fromRoomId === room.id || c.toRoomId === room.id) &&
+            isConnectionDirectMatch(c, queryStr)
+        );
+        if (hasMatchingConn) return true;
+      }
+
+      return false;
     }
     return true;
   }
@@ -1039,6 +1095,17 @@
         !isNestedPicker &&
         (isRoomHighlightedForConn(conn.fromRoomId) || isRoomHighlightedForConn(conn.toRoomId));
 
+      const isFilteringMain = !isNestedPicker && (searchQuery.trim() !== "" || activeTagFilters.size > 0);
+      const isFilteringNested = isNestedPicker && connModalState.searchFilter.trim() !== "";
+
+      let matchesFilter = true;
+      if (isFilteringMain) {
+        matchesFilter = doesConnectionMatchSearchAndFilter(conn, searchQuery, activeTagFilters);
+      } else if (isFilteringNested) {
+        matchesFilter = doesConnectionMatchSearchAndFilter(conn, connModalState.searchFilter, null);
+      }
+      const isDirectMatch = isFilteringMain && isConnectionDirectMatch(conn, searchQuery);
+
       const classes = ["conn-group"];
       if (!conn.bidirectional) classes.push("oneway");
       if (conn.style === "warp") {
@@ -1047,6 +1114,8 @@
       }
       if (isAttachedToSelectedRoom) classes.push("connected-to-selected");
       if (isSelected) classes.push("selected");
+      if ((isFilteringMain || isFilteringNested) && !matchesFilter) classes.push("dimmed");
+      if (isDirectMatch) classes.push("search-match");
 
       const g = createSvgEl("g", { class: classes.join(" "), "data-conn-id": conn.id });
 
@@ -1064,6 +1133,9 @@
       if (isSelected) {
         markerEnd = "url(#arrow-selected)";
         if (conn.bidirectional) markerStart = "url(#arrow-selected)";
+      } else if (isDirectMatch) {
+        markerEnd = "url(#arrow-search-match)";
+        if (conn.bidirectional) markerStart = "url(#arrow-search-match)";
       } else if (!conn.bidirectional) {
         markerEnd = isWarp ? "url(#arrow-oneway-warp)" : "url(#arrow-oneway)";
       } else {
@@ -1616,6 +1688,23 @@
     renderMainMap();
   }
 
+  function centerCameraOnConnection(connId) {
+    const conn = getConnectionById(connId);
+    if (!conn) return;
+    const posFrom = getRoomPos(conn.fromRoomId);
+    const posTo = getRoomPos(conn.toRoomId);
+    if (!posFrom || !posTo) return;
+    const midX = (posFrom.x + posTo.x) / 2;
+    const midY = (posFrom.y + posTo.y) / 2;
+    const svgEl = document.getElementById("map-svg");
+    const rect = svgEl.getBoundingClientRect();
+    const vp = appState.mapDisplayConfig.viewport;
+    vp.panX = Math.round(rect.width / 2 - midX * vp.zoom);
+    vp.panY = Math.round(rect.height / 2 - midY * vp.zoom);
+    saveStateToLocal(false);
+    renderMainMap();
+  }
+
   // ==================== UI RENDERING & SYNC ====================
   function renderMainMap() {
     renderGraphToSvg({
@@ -1691,24 +1780,40 @@
       }
     }
 
-    // Filter rooms for list
+    // Filter rooms & connections for list
     const resultsEl = document.getElementById("room-search-results");
     if (!resultsEl) return;
 
+    const isFiltered = searchQuery.trim() !== "" || activeTagFilters.size > 0;
     const matchingRooms = appState.rooms.filter((r) =>
       doesRoomMatchSearchAndFilter(r, searchQuery, activeTagFilters)
     );
+    const matchingConnections = isFiltered
+      ? appState.connections.filter((c) =>
+          doesConnectionMatchSearchAndFilter(c, searchQuery, activeTagFilters)
+        )
+      : [];
 
-    if (matchingRooms.length === 0) {
+    if (matchingRooms.length === 0 && matchingConnections.length === 0) {
       resultsEl.innerHTML = `<div class="muted-hint" style="padding: 12px 6px;">${
         appState.rooms.length === 0
           ? "No rooms created yet."
-          : "No rooms match your search or tag filter."
+          : "No rooms or connections match your search or tag filter."
       }</div>`;
       return;
     }
 
     resultsEl.innerHTML = "";
+
+    // If search/filter is active and both rooms and connections match, show a section header for Rooms
+    if (isFiltered && matchingConnections.length > 0) {
+      const roomHeader = document.createElement("div");
+      roomHeader.className = "section-label-row";
+      roomHeader.style.padding = "4px 6px 2px";
+      roomHeader.innerHTML = `<span class="section-label">Rooms (${matchingRooms.length})</span>`;
+      resultsEl.appendChild(roomHeader);
+    }
+
     for (const room of matchingRooms) {
       const isRoomSelected =
         selectedRoomId === room.id || multiSelectedRoomIds.has(room.id);
@@ -1741,6 +1846,70 @@
         }
       });
       resultsEl.appendChild(item);
+    }
+
+    // Render Matching Connections if any
+    if (matchingConnections.length > 0) {
+      const connHeader = document.createElement("div");
+      connHeader.className = "section-label-row";
+      connHeader.style.padding = "12px 6px 4px";
+      connHeader.innerHTML = `<span class="section-label">Connections (${matchingConnections.length})</span>`;
+      resultsEl.appendChild(connHeader);
+
+      for (const conn of matchingConnections) {
+        const fromRoom = getRoomById(conn.fromRoomId);
+        const toRoom = getRoomById(conn.toRoomId);
+        if (!fromRoom || !toRoom) continue;
+
+        const isConnSelected = selectedConnectionId === conn.id;
+        const item = document.createElement("div");
+        item.className =
+          "room-list-item conn-search-item" +
+          (isConnSelected ? " selected" : "") +
+          (conn.style === "warp" ? " warp" : "") +
+          (!conn.bidirectional ? " oneway" : "");
+
+        const dirSymbol = conn.bidirectional ? "↔" : "→";
+        item.innerHTML = `
+          <div class="room-item-top" style="gap: 6px;">
+            <span style="color: var(--text-muted); font-size: 11px;">${dirSymbol}</span>
+            <div style="display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              ${renderRoomColorDot(fromRoom.color)}
+              <span style="font-weight: 600;">${escapeHtml(fromRoom.name)}</span>
+              <span style="color: var(--text-muted); font-size: 11px;">${dirSymbol}</span>
+              ${renderRoomColorDot(toRoom.color)}
+              <span style="font-weight: 600;">${escapeHtml(toRoom.name)}</span>
+            </div>
+            ${
+              conn.style === "warp"
+                ? `<span class="conn-search-badge" style="margin-left: auto; color: #c084fc; border-color: rgba(192,132,252,0.3);">Warp</span>`
+                : ""
+            }
+          </div>
+          ${
+            conn.label
+              ? `<div class="room-item-desc">Exit: <strong>${escapeHtml(conn.label)}</strong>${
+                  conn.reverseLabel
+                    ? ` • Return: <strong>${escapeHtml(conn.reverseLabel)}</strong>`
+                    : ""
+                }</div>`
+              : ""
+          }
+          ${
+            conn.notes
+              ? `<div class="room-item-desc" style="color: var(--text-muted); font-style: italic;">${escapeHtml(
+                  conn.notes
+                )}</div>`
+              : ""
+          }
+        `;
+
+        item.addEventListener("click", () => {
+          selectConnection(conn.id);
+          centerCameraOnConnection(conn.id);
+        });
+        resultsEl.appendChild(item);
+      }
     }
   }
 

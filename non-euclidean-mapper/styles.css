@@ -682,6 +682,60 @@ html, body {
   opacity: 1;
 }
 
+/* Dimmed and Search Match for Connections */
+.conn-group.dimmed {
+  opacity: 0.12 !important;
+}
+
+.conn-group.search-match {
+  opacity: 1 !important;
+}
+
+.conn-group.search-match .conn-path {
+  stroke: #10b981 !important;
+  stroke-width: 3.5px !important;
+  filter: drop-shadow(0 0 5px rgba(16, 185, 129, 0.7));
+}
+
+.conn-group.search-match .conn-label-bg {
+  stroke: #10b981 !important;
+  stroke-width: 1.5px !important;
+  fill: rgba(6, 78, 59, 0.95) !important;
+  opacity: 1 !important;
+}
+
+.conn-group.search-match .conn-label-text {
+  fill: #a7f3d0 !important;
+  font-weight: 700 !important;
+}
+
+/* Sidebar Connection Search Item */
+.conn-search-item {
+  border-left: 3px solid #64748b;
+}
+
+.conn-search-item.warp {
+  border-left-color: #a855f7;
+}
+
+.conn-search-item.oneway {
+  border-left-color: #f59e0b;
+}
+
+.conn-search-item:hover {
+  border-left-color: var(--primary);
+}
+
+.conn-search-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
 /* Room Nodes on SVG */
 .room-node {
   cursor: pointer;
