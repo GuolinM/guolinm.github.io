@@ -7,6 +7,7 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
 - **Platform:** Single-Page Web App (HTML/CSS/TypeScript + Vite, or zero-build portable HTML/JS bundle) that can be:
   1. Hosted directly on **GitHub Pages** for instant access anywhere (`https://guolinm.github.io/non-euclidean-mapper/`).
   2. Built as a **single self-contained `.html` file** (`dist/non-euclidean-mapper.html`) that runs offline on any Windows device by double-clicking it.
+- **Branding & Assets:** Custom parchment map scroll icon used as the browser favicon (`favicon.png`) and inlined as base64 in the standalone bundle.
 - **Save Format:** **JSON** (with optional **YAML** export/import) containing both the logical graph (`rooms`, `connections`) and `mapDisplayConfig` (pinned node coordinates, zoom/pan state, color themes, layout settings).
 
 ---
