@@ -71,6 +71,7 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
   - **Tags** (autocomplete/click from existing tags + create new, with live prefix highlighting on the existing tag chip list based on the currently typed tag after the last comma)
   - **Color Accent** (preset swatches + dynamic swatches of any custom hex colors currently used by rooms in the map + special non-hex **Rainbow** gradient color option + hex code input `#RRGGBB` / `rainbow` and native color wheel picker)
 - Clicking/tapping any room on the map opens an **Inspector / Edit Side Panel** to view and edit its name, description, tags, color accent (including Rainbow and hex code input), and list of connections, or quickly add an adjacent connected room.
+- **Clone Room Button (`Clone`):** Available in the selected Room Inspector header and Quick Explore card. Opens the Room Creation modal with all fields (`name`, `color`, `tags`, `description`) copied from the selected room and pre-configured to connect to the selected room by default.
 
 ### Priority 3: Connection Creation Menu & Connection Inspector
 - Connect two rooms via:

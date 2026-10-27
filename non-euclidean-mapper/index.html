@@ -382,6 +382,7 @@
             <h2>Edit Room</h2>
             <div class="header-actions">
               <button id="btn-back-to-connection" class="btn btn-xs btn-secondary hidden" title="Return to previously edited connection">← Connection</button>
+              <button id="btn-clone-room-header" class="btn btn-xs btn-secondary" title="Clone this room (copies fields &amp; connects by default)">Clone</button>
               <button id="btn-center-selected-room" class="btn btn-xs btn-ghost" title="Center camera on this room">Center</button>
               <button id="btn-close-inspector" class="icon-btn" title="Deselect (Esc)">&times;</button>
             </div>
@@ -430,6 +431,9 @@
                 </button>
                 <button id="btn-connect-from-here" class="btn btn-accent btn-sm full-width">
                   Link Existing Room...
+                </button>
+                <button id="btn-clone-room" type="button" class="btn btn-secondary btn-sm full-width" title="Open room creation modal with all fields copied from this room and connected to it by default">
+                  ⧉ Clone Room (Copy Fields &amp; Connect)...
                 </button>
               </div>
             </div>
@@ -656,7 +660,7 @@
 
           <div class="modal-footer">
             <button id="btn-cancel-add-room" type="button" class="btn btn-ghost">Cancel</button>
-            <button type="submit" class="btn btn-primary">Create Room</button>
+            <button id="btn-submit-add-room" type="submit" class="btn btn-primary">Create Room</button>
           </div>
         </form>
       </div>

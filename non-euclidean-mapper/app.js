@@ -2269,38 +2269,19 @@
       }
 
       // Color swatches (including any custom hex colors used across rooms)
-      const colorsWrap = document.getElementById("edit-room-colors");
-      colorsWrap.innerHTML = "";
       const activeRoomColor = normalizeRoomColor(selectedRoom.color) || ROOM_COLORS[0];
-      const availableColors = getAvailableRoomColors(activeRoomColor);
-      for (const c of availableColors) {
-        const sw = document.createElement("button");
-        sw.type = "button";
-        const isRainbow = c === RAINBOW_COLOR;
-        sw.className = "color-swatch" + (activeRoomColor === c ? " active" : "") + (isRainbow ? " rainbow" : "");
-        if (!isRainbow) {
-          sw.style.background = c;
-        }
-        sw.title = isRainbow ? "Rainbow" : c;
-        sw.addEventListener("click", () => {
+      renderColorSwatchPicker({
+        swatchContainer: document.getElementById("edit-room-colors"),
+        colorPickerInput: document.getElementById("edit-room-color-picker"),
+        hexTextInput: document.getElementById("edit-room-hex-input"),
+        currentColor: activeRoomColor,
+        onSelectColor: (c) => {
           pushUndoSnapshot();
           selectedRoom.color = c;
           saveStateToLocal();
           renderAll();
-        });
-        colorsWrap.appendChild(sw);
-      }
-
-      const editColorPicker = document.getElementById("edit-room-color-picker");
-      if (editColorPicker && document.activeElement !== editColorPicker) {
-        if (activeRoomColor !== RAINBOW_COLOR) {
-          editColorPicker.value = activeRoomColor;
-        }
-      }
-      const editHexInput = document.getElementById("edit-room-hex-input");
-      if (editHexInput && document.activeElement !== editHexInput) {
-        editHexInput.value = activeRoomColor;
-      }
+        },
+      });
 
       // Editable tags list
       const tagsWrap = document.getElementById("edit-room-tags-list");
@@ -2553,17 +2534,88 @@
     renderAll();
   }
 
-  // ==================== ADD ROOM MODAL (Priority 2) ====================
-  function openAddRoomModal({ branchFromRoomId = null, worldCoords = null } = {}) {
-    branchSourceRoomId = branchFromRoomId;
+  // ==================== REUSABLE ROOM FORM COMPONENTS & ADD/CLONE ROOM MODAL (Priority 2) ====================
+  function renderColorSwatchPicker({
+    swatchContainer,
+    colorPickerInput,
+    hexTextInput,
+    currentColor,
+    onSelectColor,
+  }) {
+    if (!swatchContainer) return;
+    swatchContainer.innerHTML = "";
+    const normColor = normalizeRoomColor(currentColor) || ROOM_COLORS[0];
+    const availableColors = getAvailableRoomColors(normColor);
+    for (const c of availableColors) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      const isRainbow = c === RAINBOW_COLOR;
+      btn.className =
+        "color-swatch" + (normColor === c ? " active" : "") + (isRainbow ? " rainbow" : "");
+      if (!isRainbow) {
+        btn.style.background = c;
+      }
+      btn.title = isRainbow ? "Rainbow" : c;
+      btn.addEventListener("click", () => {
+        onSelectColor(c);
+      });
+      swatchContainer.appendChild(btn);
+    }
+    if (colorPickerInput && document.activeElement !== colorPickerInput) {
+      if (normColor !== RAINBOW_COLOR) {
+        colorPickerInput.value = normColor;
+      }
+    }
+    if (hexTextInput && document.activeElement !== hexTextInput) {
+      hexTextInput.value = normColor;
+    }
+  }
+
+  function openAddRoomModal({
+    branchFromRoomId = null,
+    worldCoords = null,
+    cloneFromRoom = null,
+  } = {}) {
+    const sourceClone =
+      cloneFromRoom && typeof cloneFromRoom === "object"
+        ? cloneFromRoom
+        : typeof cloneFromRoom === "string"
+        ? getRoomById(cloneFromRoom)
+        : null;
+
+    branchSourceRoomId = branchFromRoomId || (sourceClone ? sourceClone.id : null);
     pendingSpawnCoords = worldCoords;
 
     const modal = document.getElementById("modal-add-room");
     modal.classList.remove("hidden");
 
-    document.getElementById("new-room-name").value = "";
-    document.getElementById("new-room-tags").value = "";
-    document.getElementById("new-room-desc").value = "";
+    const modalTitleEl = document.getElementById("modal-add-room-title");
+    if (modalTitleEl) {
+      modalTitleEl.textContent = sourceClone
+        ? `Clone Room ("${sourceClone.name}")`
+        : "Add New Room";
+    }
+    const submitBtnEl = document.getElementById("btn-submit-add-room");
+    if (submitBtnEl) {
+      submitBtnEl.textContent = sourceClone ? "Create Cloned Room" : "Create Room";
+    }
+
+    const nameInput = document.getElementById("new-room-name");
+    const tagsInput = document.getElementById("new-room-tags");
+    const descInput = document.getElementById("new-room-desc");
+
+    if (sourceClone) {
+      nameInput.value = sourceClone.name || "";
+      const clonedTags = Array.isArray(sourceClone.tags) ? sourceClone.tags : [];
+      tagsInput.value = clonedTags.length > 0 ? clonedTags.join(", ") + ", " : "";
+      descInput.value = sourceClone.description || "";
+      newRoomColor = normalizeRoomColor(sourceClone.color) || ROOM_COLORS[0];
+    } else {
+      nameInput.value = "";
+      tagsInput.value = "";
+      descInput.value = "";
+    }
+
     document.getElementById("branch-exit-label").value = "";
     document.getElementById("branch-return-label").value = "";
     document.getElementById("branch-is-twoway").checked = true;
@@ -2584,32 +2636,17 @@
 
     // Render color swatches (including any custom hex colors used across rooms)
     const renderNewRoomSwatches = () => {
-      const swatchContainer = document.getElementById("new-room-colors");
-      swatchContainer.innerHTML = "";
-      const normNew = normalizeRoomColor(newRoomColor) || ROOM_COLORS[0];
-      newRoomColor = normNew;
-      const availableColors = getAvailableRoomColors(normNew);
-      for (const c of availableColors) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        const isRainbow = c === RAINBOW_COLOR;
-        btn.className = "color-swatch" + (normNew === c ? " active" : "") + (isRainbow ? " rainbow" : "");
-        if (!isRainbow) {
-          btn.style.background = c;
-        }
-        btn.title = isRainbow ? "Rainbow" : c;
-        btn.addEventListener("click", () => {
+      newRoomColor = normalizeRoomColor(newRoomColor) || ROOM_COLORS[0];
+      renderColorSwatchPicker({
+        swatchContainer: document.getElementById("new-room-colors"),
+        colorPickerInput: document.getElementById("new-room-color-picker"),
+        hexTextInput: document.getElementById("new-room-hex-input"),
+        currentColor: newRoomColor,
+        onSelectColor: (c) => {
           newRoomColor = c;
           renderNewRoomSwatches();
-        });
-        swatchContainer.appendChild(btn);
-      }
-      const newColorPicker = document.getElementById("new-room-color-picker");
-      if (newColorPicker && normNew !== RAINBOW_COLOR) {
-        newColorPicker.value = normNew;
-      }
-      const newHexInput = document.getElementById("new-room-hex-input");
-      if (newHexInput && document.activeElement !== newHexInput) newHexInput.value = normNew;
+        },
+      });
     };
     renderNewRoomSwatches();
 
@@ -2651,7 +2688,16 @@
     }
     updateNewRoomTagHighlights();
 
-    setTimeout(() => document.getElementById("new-room-name").focus(), 30);
+    setTimeout(() => {
+      nameInput.focus();
+      if (sourceClone) nameInput.select();
+    }, 30);
+  }
+
+  function openCloneRoomModal(roomId) {
+    const room = getRoomById(roomId || selectedRoomId);
+    if (!room) return;
+    openAddRoomModal({ branchFromRoomId: room.id, cloneFromRoom: room });
   }
 
   function updateNewRoomTagHighlights() {
@@ -3954,29 +4000,15 @@
         return;
       }
       newRoomColor = norm;
-      const newColorPicker = document.getElementById("new-room-color-picker");
-      if (newColorPicker && norm !== RAINBOW_COLOR) newColorPicker.value = norm;
-      const newHexInput = document.getElementById("new-room-hex-input");
-      if (newHexInput) newHexInput.value = norm;
-
-      const swatchContainer = document.getElementById("new-room-colors");
-      if (swatchContainer) {
-        swatchContainer.innerHTML = "";
-        for (const c of getAvailableRoomColors(norm)) {
-          const btn = document.createElement("button");
-          btn.type = "button";
-          const isRainbow = c === RAINBOW_COLOR;
-          btn.className = "color-swatch" + (norm === c ? " active" : "") + (isRainbow ? " rainbow" : "");
-          if (!isRainbow) {
-            btn.style.background = c;
-          }
-          btn.title = isRainbow ? "Rainbow" : c;
-          btn.addEventListener("click", () => {
-            applyHexToNewRoomModal(c);
-          });
-          swatchContainer.appendChild(btn);
-        }
-      }
+      renderColorSwatchPicker({
+        swatchContainer: document.getElementById("new-room-colors"),
+        colorPickerInput: document.getElementById("new-room-color-picker"),
+        hexTextInput: document.getElementById("new-room-hex-input"),
+        currentColor: norm,
+        onSelectColor: (c) => {
+          applyHexToNewRoomModal(c);
+        },
+      });
     };
 
     document.getElementById("new-room-color-picker").addEventListener("input", (e) => {
@@ -3999,6 +4031,19 @@
     document.getElementById("btn-connect-from-here").addEventListener("click", () => {
       if (selectedRoomId) openAddConnectionModal(selectedRoomId);
     });
+
+    const btnCloneRoom = document.getElementById("btn-clone-room");
+    if (btnCloneRoom) {
+      btnCloneRoom.addEventListener("click", () => {
+        if (selectedRoomId) openCloneRoomModal(selectedRoomId);
+      });
+    }
+    const btnCloneRoomHeader = document.getElementById("btn-clone-room-header");
+    if (btnCloneRoomHeader) {
+      btnCloneRoomHeader.addEventListener("click", () => {
+        if (selectedRoomId) openCloneRoomModal(selectedRoomId);
+      });
+    }
 
     document.getElementById("btn-delete-room").addEventListener("click", () => {
       if (!selectedRoomId) return;
