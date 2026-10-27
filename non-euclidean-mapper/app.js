@@ -1875,6 +1875,8 @@
   function renderLeftSidebar() {
     const badge = document.getElementById("room-count-badge");
     if (badge) badge.textContent = String(appState.rooms.length);
+    const expandBadge = document.getElementById("expand-room-count-badge");
+    if (expandBadge) expandBadge.textContent = String(appState.rooms.length);
 
     const mobSearchBadge = document.getElementById("mob-search-badge");
     const mobSearchBtn = document.getElementById("mob-btn-search");
@@ -4163,6 +4165,25 @@
     });
 
     // Left Sidebar Search & Filter (Priority 4)
+    const setLeftSidebarCollapsed = (collapsed) => {
+      const leftSidebar = document.getElementById("left-sidebar");
+      const expandBtn = document.getElementById("btn-expand-left-sidebar");
+      if (leftSidebar) leftSidebar.classList.toggle("collapsed", Boolean(collapsed));
+      if (expandBtn) expandBtn.classList.toggle("hidden", !collapsed);
+    };
+
+    const btnCollapseLeft = document.getElementById("btn-collapse-left-sidebar");
+    if (btnCollapseLeft) {
+      btnCollapseLeft.addEventListener("click", () => setLeftSidebarCollapsed(true));
+    }
+    const btnExpandLeft = document.getElementById("btn-expand-left-sidebar");
+    if (btnExpandLeft) {
+      btnExpandLeft.addEventListener("click", () => {
+        setLeftSidebarCollapsed(false);
+        setTimeout(() => document.getElementById("search-input")?.focus(), 40);
+      });
+    }
+
     const searchInput = document.getElementById("search-input");
     const clearSearchBtn = document.getElementById("btn-clear-search");
     searchInput.addEventListener("input", (e) => {
@@ -4881,7 +4902,12 @@
         toggleMultiSelectMode();
       } else if (e.key === "/" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f")) {
         e.preventDefault();
-        document.getElementById("search-input").focus();
+        if (isMobileLayout()) {
+          openMobileSearchDialog();
+        } else {
+          setLeftSidebarCollapsed(false);
+          document.getElementById("search-input").focus();
+        }
       } else if (e.key.toLowerCase() === "f") {
         e.preventDefault();
         fitMapViewport(mainSvg, appState.mapDisplayConfig.viewport);

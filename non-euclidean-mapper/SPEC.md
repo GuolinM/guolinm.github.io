@@ -88,6 +88,7 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
 
 ### Priority 4: Search & Filter by Room & Connection
 - Persistent search bar (`Ctrl+F` / `/`) that filters rooms and connections by **room name**, **description**, **tags**, **connection labels**, **reverse labels**, **passage style**, or **connection notes**.
+- **Collapsible Left Sidebar:** Can be collapsed on desktop via `#btn-collapse-left-sidebar` to maximize map canvas space, revealing a floating top-left `Rooms & Search` pill button (`#btn-expand-left-sidebar`) with the room count badge to re-expand anytime (or via `/` / `Ctrl+F`).
 - Left sidebar search results display matching rooms and matching connections in dedicated sections, with quick-select and camera centering.
 - Responsive canvas dimming: non-matching rooms and connections are dimmed (opacity 0.12), while matching rooms and matching connections are highlighted. Direct connection matches glow emerald green (`#10b981`) with highlighted green arrowheads.
 - Multi-tag filtering: selecting tag pills filters the canvas so only rooms with active tags and connections between matching rooms remain illuminated; connections attached to non-matching rooms are dimmed.
