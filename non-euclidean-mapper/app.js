@@ -2123,12 +2123,98 @@
       connEl.classList.add("hidden");
       if (multiEl) {
         multiEl.classList.remove("hidden");
-        document.getElementById("multiselect-count").textContent = String(
-          multiSelectedRoomIds.size
-        );
+        const selCount = multiSelectedRoomIds.size;
+        document.getElementById("multiselect-count").textContent = String(selCount);
+
+        // Enable/disable batch buttons when 0 rooms selected
+        multiEl.querySelectorAll(".batch-rot-btn").forEach((btn) => {
+          btn.disabled = selCount === 0;
+        });
+        const batchAddBtn = document.getElementById("btn-batch-add-tag");
+        if (batchAddBtn) batchAddBtn.disabled = selCount === 0;
+
+        // Render Batch Tags Summary
+        const batchTagsListEl = document.getElementById("batch-selected-tags-list");
+        if (batchTagsListEl && window.BatchActions) {
+          batchTagsListEl.innerHTML = "";
+          const tagSummary = window.BatchActions.getSelectedRoomsTagSummary(
+            appState.rooms,
+            multiSelectedRoomIds
+          );
+          if (selCount === 0) {
+            batchTagsListEl.innerHTML = `<span class="muted-hint">Select rooms to view or edit tags</span>`;
+          } else if (tagSummary.length === 0) {
+            batchTagsListEl.innerHTML = `<span class="muted-hint">No tags on selected rooms</span>`;
+          } else {
+            for (const item of tagSummary) {
+              const pill = document.createElement("span");
+              pill.className = "tag-pill" + (item.isAll ? "" : " partial-tag");
+              const countSuffix = item.isAll ? "" : ` (${item.count}/${item.totalSelected})`;
+              pill.title = item.isAll
+                ? `Present on all ${item.totalSelected} selected rooms`
+                : `Present on ${item.count} of ${item.totalSelected} selected rooms`;
+              pill.innerHTML = `#${escapeHtml(item.tag)}${countSuffix} <span class="remove-tag" title="Remove #${escapeHtml(
+                item.tag
+              )} from all selected rooms">&times;</span>`;
+              pill.querySelector(".remove-tag").addEventListener("click", (e) => {
+                e.stopPropagation();
+                pushUndoSnapshot();
+                const res = window.BatchActions.batchRemoveTagFromRooms(
+                  appState.rooms,
+                  multiSelectedRoomIds,
+                  item.tag
+                );
+                saveStateToLocal();
+                renderAll();
+                showToast(
+                  `Removed #${item.tag} from ${res.affectedRoomsCount} room${
+                    res.affectedRoomsCount === 1 ? "" : "s"
+                  }`
+                );
+              });
+              batchTagsListEl.appendChild(pill);
+            }
+          }
+        }
+
+        // Render Quick-Add Existing Tag Chips for Batch Tagging
+        const batchChipsEl = document.getElementById("batch-existing-tags-chips");
+        if (batchChipsEl && window.BatchActions) {
+          batchChipsEl.innerHTML = "";
+          const allMapTags = new Set();
+          appState.rooms.forEach((r) => (r.tags || []).forEach((t) => allMapTags.add(t)));
+          for (const t of Array.from(allMapTags).sort()) {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "chip-btn";
+            chip.disabled = selCount === 0;
+            chip.textContent = `+ #${t}`;
+            chip.title = `Add #${t} to all ${selCount} selected rooms`;
+            chip.addEventListener("click", () => {
+              if (multiSelectedRoomIds.size === 0) return;
+              pushUndoSnapshot();
+              const res = window.BatchActions.batchAddTagsToRooms(
+                appState.rooms,
+                multiSelectedRoomIds,
+                [t]
+              );
+              saveStateToLocal();
+              renderAll();
+              showToast(
+                res.affectedRoomsCount > 0
+                  ? `Added #${t} to ${res.affectedRoomsCount} room${
+                      res.affectedRoomsCount === 1 ? "" : "s"
+                    }`
+                  : `All selected rooms already have #${t}`
+              );
+            });
+            batchChipsEl.appendChild(chip);
+          }
+        }
+
         const listEl = document.getElementById("multiselect-rooms-list");
         listEl.innerHTML = "";
-        if (multiSelectedRoomIds.size === 0) {
+        if (selCount === 0) {
           listEl.innerHTML = `<span class="muted-hint">No rooms selected yet. Click rooms on the map or drag a selection box!</span>`;
         } else {
           for (const rId of multiSelectedRoomIds) {
@@ -3570,6 +3656,81 @@
       multiSelectedRoomIds.clear();
       renderAll();
     });
+
+    // Multi-Select Batch Actions (Rotation & Batch Tagging via window.BatchActions)
+    document.querySelectorAll("#batch-rotate-btns .batch-rot-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (!window.BatchActions || multiSelectedRoomIds.size === 0) return;
+        const steps = parseInt(btn.getAttribute("data-steps") || "0", 10);
+        if (!steps) return;
+        const rotPosEl = document.getElementById("batch-rot-positions");
+        const rotDirEl = document.getElementById("batch-rot-directions");
+        const rotatePositions = rotPosEl ? rotPosEl.checked : true;
+        const rotateDirections = rotDirEl ? rotDirEl.checked : true;
+
+        if (!rotatePositions && !rotateDirections) {
+          showToast("Check at least one option (Positions or Directions) to rotate");
+          return;
+        }
+
+        pushUndoSnapshot();
+        const res = window.BatchActions.batchRotateSelection({
+          connections: appState.connections,
+          selectedRoomIds: multiSelectedRoomIds,
+          getRoomPos,
+          setRoomPos,
+          steps,
+          rotatePositions,
+          rotateDirections,
+        });
+        saveStateToLocal();
+        renderAll();
+
+        const signStr = res.angleDeg > 0 ? `+${res.angleDeg}°` : `${res.angleDeg}°`;
+        showToast(
+          `Rotated ${signStr} (${res.rotatedRooms} room pos, ${res.rotatedConnections} internal connection${
+            res.rotatedConnections === 1 ? "" : "s"
+          })`
+        );
+      });
+    });
+
+    const handleBatchAddTags = () => {
+      const input = document.getElementById("batch-add-tags-input");
+      if (!window.BatchActions || !input || !input.value.trim() || multiSelectedRoomIds.size === 0) {
+        return;
+      }
+      pushUndoSnapshot();
+      const res = window.BatchActions.batchAddTagsToRooms(
+        appState.rooms,
+        multiSelectedRoomIds,
+        input.value
+      );
+      input.value = "";
+      saveStateToLocal();
+      renderAll();
+      if (res.tagsAdded.length > 0) {
+        showToast(
+          `Added ${res.tagsAdded.map((t) => "#" + t).join(", ")} to ${res.affectedRoomsCount} room${
+            res.affectedRoomsCount === 1 ? "" : "s"
+          }`
+        );
+      }
+    };
+
+    const btnBatchAddTag = document.getElementById("btn-batch-add-tag");
+    if (btnBatchAddTag) {
+      btnBatchAddTag.addEventListener("click", handleBatchAddTags);
+    }
+    const batchAddInput = document.getElementById("batch-add-tags-input");
+    if (batchAddInput) {
+      batchAddInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          handleBatchAddTags();
+        }
+      });
+    }
 
     // Zoom HUD buttons
     document.getElementById("btn-zoom-in").addEventListener("click", () => {

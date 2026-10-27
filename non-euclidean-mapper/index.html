@@ -300,10 +300,10 @@
           </div>
         </div>
 
-        <!-- Multi-Select Read-Only Summary (No editing allowed) -->
+        <!-- Multi-Select & Batch Actions -->
         <div id="inspector-multiselect" class="inspector-content hidden">
           <div class="sidebar-header">
-            <h2>Multi-Select Move</h2>
+            <h2>Multi-Select &amp; Batch Actions</h2>
             <button id="btn-close-multiselect" class="icon-btn" title="Exit Multi-Select (Esc)">&times;</button>
           </div>
           <div class="inspector-body">
@@ -312,10 +312,7 @@
                 <h4><span id="multiselect-count">0</span> Rooms Selected</h4>
               </div>
               <p class="card-subtext">
-                Click rooms (or drag a box on the canvas) to select/deselect them, then <strong>drag any selected room</strong> to move all selected rooms and their connections together.
-              </p>
-              <p class="card-subtext" style="color: var(--text-muted); font-size: 11px;">
-                Room editing is disabled while multiple rooms are selected.
+                Click rooms (or drag a box on the canvas) to select/deselect them, then <strong>drag any selected room</strong> to move the group together.
               </p>
               <div class="quick-actions-row" style="margin-top: 4px;">
                 <button id="btn-multiselect-all" type="button" class="btn btn-secondary btn-sm full-width">
@@ -326,6 +323,50 @@
                 </button>
               </div>
             </div>
+
+            <!-- Batch Action 1: Batch Rotation (Positions + Internal Directions) -->
+            <div class="inspector-card">
+              <div class="card-title-row">
+                <h4>Batch Rotate (<span style="font-weight: 400; color: var(--text-secondary);">N &times; 45&deg;</span>)</h4>
+              </div>
+              <p class="card-subtext">
+                Rotate selected rooms around their center of gravity and/or rotate cardinal &amp; ordinal directions on internal connections.
+              </p>
+              <div class="checkbox-row" style="margin: 2px 0 4px;">
+                <label class="checkbox-label">
+                  <input id="batch-rot-positions" type="checkbox" checked />
+                  Rotate positions around center of gravity
+                </label>
+                <label class="checkbox-label">
+                  <input id="batch-rot-directions" type="checkbox" checked />
+                  Rotate internal connection directions (N/NE/E/...)
+                </label>
+              </div>
+              <div id="batch-rotate-btns" class="batch-rotate-row">
+                <button type="button" class="btn btn-secondary btn-xs batch-rot-btn" data-steps="-2" title="Rotate 90° Counter-Clockwise">&larrhk; &minus;90&deg;</button>
+                <button type="button" class="btn btn-secondary btn-xs batch-rot-btn" data-steps="-1" title="Rotate 45° Counter-Clockwise">&larrhk; &minus;45&deg;</button>
+                <button type="button" class="btn btn-secondary btn-xs batch-rot-btn" data-steps="1" title="Rotate 45° Clockwise">&rarrhk; +45&deg;</button>
+                <button type="button" class="btn btn-secondary btn-xs batch-rot-btn" data-steps="2" title="Rotate 90° Clockwise">&rarrhk; +90&deg;</button>
+                <button type="button" class="btn btn-secondary btn-xs batch-rot-btn" data-steps="4" title="Rotate 180°">&#8635; 180&deg;</button>
+              </div>
+            </div>
+
+            <!-- Batch Action 2: Batch Tags Add / Remove -->
+            <div class="inspector-card">
+              <div class="card-title-row">
+                <h4>Batch Tags</h4>
+              </div>
+              <p class="card-subtext">
+                Add tags to all selected rooms, or click <strong>&times;</strong> on any tag below to remove it from all selected rooms.
+              </p>
+              <div id="batch-selected-tags-list" class="tag-chip-list editable-tags"></div>
+              <div class="tag-input-row" style="margin-top: 4px;">
+                <input id="batch-add-tags-input" type="text" placeholder="Add tag(s) to selected..." list="existing-tags-datalist" />
+                <button id="btn-batch-add-tag" class="btn btn-secondary btn-sm" type="button">Add</button>
+              </div>
+              <div id="batch-existing-tags-chips" class="preset-chips"></div>
+            </div>
+
             <div class="form-group">
               <div class="section-label-row">
                 <label>Selected Rooms</label>
@@ -799,6 +840,7 @@
     <div id="toast-container" class="toast-container"></div>
   </div>
 
+  <script src="batch-actions.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

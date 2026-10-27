@@ -57,7 +57,10 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
   - **Zero Listener Leaks:** Centralized single-instance drag manager bound once on startup, preventing event listener accumulation during renders.
   - **Direct Synchronous Drag & Pan:** Direct 1:1 cursor synchronization without asynchronous frame lag or flickering.
 - **Stable Layout:** Every room has persistent `(x, y)` coordinates saved in `mapDisplayConfig`. Adding new rooms or connections **never** resets existing room positions.
-- **Multi-Select Group Move (`M` or `Shift+Click`):** Toggleable **Multi-Select** button in the top toolbar (plus `Shift+Click` on rooms or marquee drag-box selection) to select multiple rooms and drag them and their connections all at once as a group, while keeping room editing disabled in the Inspector.
+- **Multi-Select Group Move & Batch Actions (`M` or `Shift+Click`, modularized in `batch-actions.js`):**
+  - Toggleable **Multi-Select** button in the top toolbar (plus `Shift+Click` on rooms or marquee drag-box selection) to select multiple rooms and drag them and their connections all at once as a group.
+  - **Batch Tag Management:** View all tags across selected rooms (with partial/full counts like `2/3`), add one or more tags to all selected rooms at once, or click `×` on any tag to remove it from all applicable selected rooms.
+  - **Batch Rotation ($N \times 45^\circ$):** Rotate selected rooms around their center of gravity (centroid) by $\pm 45^\circ$, $\pm 90^\circ$, or $180^\circ$, and simultaneously rotate cardinal/ordinal exit and return labels (`N`, `NE`, `E`, `SE`, `S`, `SW`, `W`, `NW`, and full/prefixed names like `North`, `Northeast`, `North Door`) on all connections internal to the selected group.
 - **Smart Collision / Placement:** New rooms spawn near the currently selected/connected room at an open spot; if two rooms overlap, gently nudge the unpinned/new room or offer an optional local relax/rearrange button without scrambling the whole map.
 - Visual distinction between **two-way connections** (solid line) and **one-way connections** (directed arrow / dashed line), plus self-loops or long-distance warps.
 

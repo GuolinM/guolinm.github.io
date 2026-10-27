@@ -1201,6 +1201,27 @@ textarea {
   border-top: 1px solid var(--border-subtle);
 }
 
+/* Batch Actions in Multi-Select Inspector */
+.batch-rotate-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.batch-rot-btn {
+  padding: 5px 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tag-pill.partial-tag {
+  background: rgba(148, 163, 184, 0.14);
+  border-color: rgba(148, 163, 184, 0.38);
+  border-style: dashed;
+  color: #cbd5e1;
+}
+
 /* Connection Inspector Specifics */
 .conn-endpoints-box {
   background: var(--bg-input);
