@@ -2741,6 +2741,212 @@
     pendingSpawnCoords = null;
   }
 
+  // ==================== FORK ROOM MODAL & SIDE-BY-SIDE CUSTODY UI ====================
+  let forkModalState = {
+    parentRoomId: null,
+    leftColor: ROOM_COLORS[0],
+    rightColor: ROOM_COLORS[0],
+    tagCustody: new Map(), // tag -> "left" | "both" | "right"
+    connCustody: new Map(), // connId -> "left" | "both" | "right"
+  };
+
+  function renderForkModalColors() {
+    renderColorSwatchPicker({
+      swatchContainer: document.getElementById("fork-left-colors"),
+      colorPickerInput: document.getElementById("fork-left-color-picker"),
+      hexTextInput: document.getElementById("fork-left-hex-input"),
+      currentColor: forkModalState.leftColor,
+      onSelectColor: (c) => {
+        forkModalState.leftColor = c;
+        renderForkModalColors();
+      },
+    });
+
+    renderColorSwatchPicker({
+      swatchContainer: document.getElementById("fork-right-colors"),
+      colorPickerInput: document.getElementById("fork-right-color-picker"),
+      hexTextInput: document.getElementById("fork-right-hex-input"),
+      currentColor: forkModalState.rightColor,
+      onSelectColor: (c) => {
+        forkModalState.rightColor = c;
+        renderForkModalColors();
+      },
+    });
+  }
+
+  function formatConnectionSummaryForFork(conn, parentRoomId) {
+    const isSelfLoop = conn.fromRoomId === parentRoomId && conn.toRoomId === parentRoomId;
+    if (isSelfLoop) {
+      const lbl = conn.label ? ` (${escapeHtml(conn.label)})` : "";
+      return `<span class="custody-conn-pill">↻ Self-Loop${lbl}</span>`;
+    }
+    const isOutgoing = conn.fromRoomId === parentRoomId;
+    const otherRoomId = isOutgoing ? conn.toRoomId : conn.fromRoomId;
+    const otherRoom = getRoomById(otherRoomId);
+    const otherName = otherRoom ? escapeHtml(otherRoom.name) : "Unknown";
+    const dotHtml = otherRoom ? renderRoomColorDot(otherRoom.color) : "";
+
+    let arrowStr = "↔";
+    if (!conn.bidirectional) {
+      arrowStr = isOutgoing ? "→" : "←";
+    }
+    const exitLbl = isOutgoing ? conn.label : conn.reverseLabel || conn.label;
+    const lblHtml = exitLbl
+      ? `<span style="color: var(--text-secondary); font-size: 11px;">(${escapeHtml(exitLbl)})</span>`
+      : "";
+    const warpHtml =
+      conn.style === "warp"
+        ? `<span style="color: #c084fc; font-size: 10.5px;">✦ Warp</span>`
+        : "";
+
+    return `
+      <span class="custody-conn-pill" title="${arrowStr} ${otherName}">
+        <span style="color: var(--text-muted);">${arrowStr}</span>
+        ${dotHtml}
+        <strong>${otherName}</strong>
+        ${lblHtml}
+        ${warpHtml}
+      </span>
+    `;
+  }
+
+  function renderForkCustodyLists() {
+    const parentId = forkModalState.parentRoomId;
+    // 1. Render Tags Custody List
+    const tagsCountEl = document.getElementById("fork-tags-count");
+    const tagsListEl = document.getElementById("fork-tags-custody-list");
+    if (tagsCountEl) tagsCountEl.textContent = String(forkModalState.tagCustody.size);
+    if (tagsListEl) {
+      tagsListEl.innerHTML = "";
+      if (forkModalState.tagCustody.size === 0) {
+        tagsListEl.innerHTML = `<div class="muted-hint" style="padding: 6px;">No tags on this room.</div>`;
+      } else {
+        for (const [tag, custody] of forkModalState.tagCustody.entries()) {
+          const row = document.createElement("div");
+          row.className = "custody-row";
+          const leftInactive = custody === "right" ? " inactive" : "";
+          const rightInactive = custody === "left" ? " inactive" : "";
+          row.innerHTML = `
+            <div class="custody-side-cell${leftInactive}">
+              <span class="tag-pill">#${escapeHtml(tag)}</span>
+            </div>
+            <div class="custody-center-controls">
+              <button type="button" class="custody-btn${custody === "left" ? " active" : ""}" data-val="left" title="Assign #${escapeHtml(tag)} only to Left Fork">← Left</button>
+              <button type="button" class="custody-btn${custody === "both" ? " active" : ""}" data-val="both" title="Assign #${escapeHtml(tag)} to Both Rooms">Both</button>
+              <button type="button" class="custody-btn${custody === "right" ? " active" : ""}" data-val="right" title="Assign #${escapeHtml(tag)} only to Right Fork">Right →</button>
+            </div>
+            <div class="custody-side-cell right${rightInactive}">
+              <span class="tag-pill">#${escapeHtml(tag)}</span>
+            </div>
+          `;
+          row.querySelectorAll(".custody-btn").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const val = btn.getAttribute("data-val") || "both";
+              forkModalState.tagCustody.set(tag, val);
+              renderForkCustodyLists();
+            });
+          });
+          tagsListEl.appendChild(row);
+        }
+      }
+    }
+
+    // 2. Render Connections Custody List
+    const connsCountEl = document.getElementById("fork-conns-count");
+    const connsListEl = document.getElementById("fork-conns-custody-list");
+    if (connsCountEl) connsCountEl.textContent = String(forkModalState.connCustody.size);
+    if (connsListEl) {
+      connsListEl.innerHTML = "";
+      if (forkModalState.connCustody.size === 0) {
+        connsListEl.innerHTML = `<div class="muted-hint" style="padding: 6px;">No connections attached to this room.</div>`;
+      } else {
+        for (const [connId, custody] of forkModalState.connCustody.entries()) {
+          const conn = getConnectionById(connId);
+          if (!conn) continue;
+          const pillHtml = formatConnectionSummaryForFork(conn, parentId);
+          const leftInactive = custody === "right" ? " inactive" : "";
+          const rightInactive = custody === "left" ? " inactive" : "";
+
+          const row = document.createElement("div");
+          row.className = "custody-row";
+          row.innerHTML = `
+            <div class="custody-side-cell${leftInactive}">
+              ${pillHtml}
+            </div>
+            <div class="custody-center-controls">
+              <button type="button" class="custody-btn${custody === "left" ? " active" : ""}" data-val="left" title="Only Left Fork keeps this connection">← Left</button>
+              <button type="button" class="custody-btn${custody === "both" ? " active" : ""}" data-val="both" title="Both rooms receive this connection">Both</button>
+              <button type="button" class="custody-btn${custody === "right" ? " active" : ""}" data-val="right" title="Move this connection to Right Fork">Right →</button>
+            </div>
+            <div class="custody-side-cell right${rightInactive}">
+              ${pillHtml}
+            </div>
+          `;
+          row.querySelectorAll(".custody-btn").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const val = btn.getAttribute("data-val") || "both";
+              forkModalState.connCustody.set(connId, val);
+              renderForkCustodyLists();
+            });
+          });
+          connsListEl.appendChild(row);
+        }
+      }
+    }
+  }
+
+  function openForkRoomModal(roomId) {
+    const parentRoom = getRoomById(roomId || selectedRoomId);
+    if (!parentRoom) return;
+
+    forkModalState.parentRoomId = parentRoom.id;
+    const inheritedColor = normalizeRoomColor(parentRoom.color) || ROOM_COLORS[0];
+    forkModalState.leftColor = inheritedColor;
+    forkModalState.rightColor = inheritedColor;
+
+    forkModalState.tagCustody = new Map();
+    for (const tag of parentRoom.tags || []) {
+      forkModalState.tagCustody.set(tag, "both");
+    }
+
+    forkModalState.connCustody = new Map();
+    for (const conn of appState.connections) {
+      if (conn.fromRoomId === parentRoom.id || conn.toRoomId === parentRoom.id) {
+        forkModalState.connCustody.set(conn.id, "both");
+      }
+    }
+
+    const titleEl = document.getElementById("modal-fork-room-title");
+    if (titleEl) {
+      titleEl.textContent = `Fork Room: "${parentRoom.name}"`;
+    }
+
+    document.getElementById("fork-left-name").value = parentRoom.name || "";
+    document.getElementById("fork-right-name").value = parentRoom.name || "";
+    document.getElementById("fork-left-desc").value = parentRoom.description || "";
+    document.getElementById("fork-right-desc").value = parentRoom.description || "";
+
+    renderForkModalColors();
+    renderForkCustodyLists();
+
+    const modal = document.getElementById("modal-fork-room");
+    if (modal) modal.classList.remove("hidden");
+
+    setTimeout(() => {
+      const rightNameInput = document.getElementById("fork-right-name");
+      if (rightNameInput) {
+        rightNameInput.focus();
+        rightNameInput.select();
+      }
+    }, 30);
+  }
+
+  function closeForkRoomModal() {
+    const modal = document.getElementById("modal-fork-room");
+    if (modal) modal.classList.add("hidden");
+    forkModalState.parentRoomId = null;
+  }
+
   // ==================== ADD CONNECTION MODAL + NESTED VISUAL MAP (Priority 3) ====================
   function openAddConnectionModal(initialFromRoomId = null) {
     if (appState.rooms.length === 0) {
@@ -4045,6 +4251,19 @@
       });
     }
 
+    const btnForkRoom = document.getElementById("btn-fork-room");
+    if (btnForkRoom) {
+      btnForkRoom.addEventListener("click", () => {
+        if (selectedRoomId) openForkRoomModal(selectedRoomId);
+      });
+    }
+    const btnForkRoomHeader = document.getElementById("btn-fork-room-header");
+    if (btnForkRoomHeader) {
+      btnForkRoomHeader.addEventListener("click", () => {
+        if (selectedRoomId) openForkRoomModal(selectedRoomId);
+      });
+    }
+
     document.getElementById("btn-delete-room").addEventListener("click", () => {
       if (!selectedRoomId) return;
       const room = getRoomById(selectedRoomId);
@@ -4282,6 +4501,159 @@
       showToast(`Added room "${newRoom.name}"`);
     });
 
+    // Modal 1B: Fork Room Events
+    const btnCloseFork = document.getElementById("btn-close-fork-room");
+    if (btnCloseFork) btnCloseFork.addEventListener("click", closeForkRoomModal);
+    const btnCancelFork = document.getElementById("btn-cancel-fork-room");
+    if (btnCancelFork) btnCancelFork.addEventListener("click", closeForkRoomModal);
+
+    const applyForkSideColor = (side, rawColor) => {
+      const norm = normalizeRoomColor(rawColor);
+      if (!norm) {
+        showToast("Enter a valid hex color like #38bdf8, or 'rainbow'");
+        return;
+      }
+      if (side === "left") forkModalState.leftColor = norm;
+      else forkModalState.rightColor = norm;
+      renderForkModalColors();
+    };
+
+    const forkLeftPicker = document.getElementById("fork-left-color-picker");
+    if (forkLeftPicker) {
+      forkLeftPicker.addEventListener("input", (e) => applyForkSideColor("left", e.target.value));
+    }
+    const forkLeftApplyBtn = document.getElementById("btn-fork-left-apply-hex");
+    if (forkLeftApplyBtn) {
+      forkLeftApplyBtn.addEventListener("click", () => {
+        applyForkSideColor("left", document.getElementById("fork-left-hex-input").value);
+      });
+    }
+    const forkLeftHexInput = document.getElementById("fork-left-hex-input");
+    if (forkLeftHexInput) {
+      forkLeftHexInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          applyForkSideColor("left", e.target.value);
+        }
+      });
+    }
+
+    const forkRightPicker = document.getElementById("fork-right-color-picker");
+    if (forkRightPicker) {
+      forkRightPicker.addEventListener("input", (e) => applyForkSideColor("right", e.target.value));
+    }
+    const forkRightApplyBtn = document.getElementById("btn-fork-right-apply-hex");
+    if (forkRightApplyBtn) {
+      forkRightApplyBtn.addEventListener("click", () => {
+        applyForkSideColor("right", document.getElementById("fork-right-hex-input").value);
+      });
+    }
+    const forkRightHexInput = document.getElementById("fork-right-hex-input");
+    if (forkRightHexInput) {
+      forkRightHexInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          applyForkSideColor("right", e.target.value);
+        }
+      });
+    }
+
+    document.querySelectorAll(".fork-bulk-tags").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const val = btn.getAttribute("data-custody") || "both";
+        for (const tag of forkModalState.tagCustody.keys()) {
+          forkModalState.tagCustody.set(tag, val);
+        }
+        renderForkCustodyLists();
+      });
+    });
+
+    document.querySelectorAll(".fork-bulk-conns").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const val = btn.getAttribute("data-custody") || "both";
+        for (const cId of forkModalState.connCustody.keys()) {
+          forkModalState.connCustody.set(cId, val);
+        }
+        renderForkCustodyLists();
+      });
+    });
+
+    const formForkRoom = document.getElementById("form-fork-room");
+    if (formForkRoom) {
+      formForkRoom.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const parentRoom = getRoomById(forkModalState.parentRoomId);
+        if (!parentRoom) return;
+
+        const leftName = document.getElementById("fork-left-name").value.trim() || parentRoom.name;
+        const rightName = document.getElementById("fork-right-name").value.trim() || parentRoom.name;
+        const leftDesc = document.getElementById("fork-left-desc").value.trim();
+        const rightDesc = document.getElementById("fork-right-desc").value.trim();
+
+        pushUndoSnapshot();
+
+        const leftTags = [];
+        const rightTags = [];
+        for (const [tag, custody] of forkModalState.tagCustody.entries()) {
+          if (custody === "left" || custody === "both") leftTags.push(tag);
+          if (custody === "right" || custody === "both") rightTags.push(tag);
+        }
+
+        // Update parentRoom as Left Fork (Room A)
+        parentRoom.name = leftName;
+        parentRoom.color = forkModalState.leftColor;
+        parentRoom.description = leftDesc;
+        parentRoom.tags = leftTags;
+
+        // Create Right Fork (Room B)
+        const rightRoom = {
+          id: generateId("r"),
+          name: rightName,
+          color: forkModalState.rightColor,
+          description: rightDesc,
+          tags: rightTags,
+        };
+
+        const origPos = getRoomPos(parentRoom.id);
+        const freeRightPos = findNearestFreePosition(origPos.x + 215, origPos.y, rightRoom.id);
+        appState.rooms.push(rightRoom);
+        setRoomPos(rightRoom.id, freeRightPos.x, freeRightPos.y);
+
+        // Apply Connection Custody
+        for (const [connId, custody] of forkModalState.connCustody.entries()) {
+          const conn = getConnectionById(connId);
+          if (!conn) continue;
+
+          if (custody === "left") {
+            // Stays on parentRoom (Left Fork)
+            continue;
+          } else if (custody === "right") {
+            // Re-point from parentRoom to rightRoom
+            if (conn.fromRoomId === parentRoom.id) conn.fromRoomId = rightRoom.id;
+            if (conn.toRoomId === parentRoom.id) conn.toRoomId = rightRoom.id;
+          } else {
+            // custody === "both": keep original on Left Fork, and clone a copy for Right Fork
+            appState.connections.push({
+              id: generateId("c"),
+              fromRoomId: conn.fromRoomId === parentRoom.id ? rightRoom.id : conn.fromRoomId,
+              toRoomId: conn.toRoomId === parentRoom.id ? rightRoom.id : conn.toRoomId,
+              bidirectional: conn.bidirectional,
+              style: conn.style,
+              label: conn.label || "",
+              reverseLabel: conn.reverseLabel || "",
+              notes: conn.notes || "",
+            });
+          }
+        }
+
+        closeForkRoomModal();
+        selectRoom(rightRoom.id);
+        saveStateToLocal();
+        renderAll();
+        showToast(`Forked into "${parentRoom.name}" & "${rightRoom.name}"`);
+      });
+    }
+
     // Modal 2: Add Connection Events (Priority 3)
     document.getElementById("btn-close-add-conn").addEventListener("click", closeAddConnectionModal);
     document.getElementById("btn-cancel-add-conn").addEventListener("click", closeAddConnectionModal);
@@ -4404,6 +4776,7 @@
 
       if (e.key === "Escape") {
         closeAddRoomModal();
+        closeForkRoomModal();
         closeAddConnectionModal();
         closeMobileSearchDialog();
         document.getElementById("modal-backups").classList.add("hidden");

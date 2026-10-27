@@ -383,6 +383,7 @@
             <div class="header-actions">
               <button id="btn-back-to-connection" class="btn btn-xs btn-secondary hidden" title="Return to previously edited connection">← Connection</button>
               <button id="btn-clone-room-header" class="btn btn-xs btn-secondary" title="Clone this room (copies fields &amp; connects by default)">Clone</button>
+              <button id="btn-fork-room-header" class="btn btn-xs btn-secondary" title="Fork this room into two rooms &amp; assign custody of tags/connections">Fork</button>
               <button id="btn-center-selected-room" class="btn btn-xs btn-ghost" title="Center camera on this room">Center</button>
               <button id="btn-close-inspector" class="icon-btn" title="Deselect (Esc)">&times;</button>
             </div>
@@ -434,6 +435,9 @@
                 </button>
                 <button id="btn-clone-room" type="button" class="btn btn-secondary btn-sm full-width" title="Open room creation modal with all fields copied from this room and connected to it by default">
                   ⧉ Clone Room (Copy Fields &amp; Connect)...
+                </button>
+                <button id="btn-fork-room" type="button" class="btn btn-secondary btn-sm full-width" title="Split/fork this room into two rooms side-by-side and choose which tags and connections go to Left, Right, or Both">
+                  ⑂ Fork Room (Split &amp; Assign Custody)...
                 </button>
               </div>
             </div>
@@ -661,6 +665,104 @@
           <div class="modal-footer">
             <button id="btn-cancel-add-room" type="button" class="btn btn-ghost">Cancel</button>
             <button id="btn-submit-add-room" type="submit" class="btn btn-primary">Create Room</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL 1B: Fork Room Side-by-Side Comparison & Custody Assignment -->
+    <div id="modal-fork-room" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-fork-room-title">
+      <div class="modal-card modal-wide">
+        <div class="modal-header">
+          <h3 id="modal-fork-room-title">Fork Room</h3>
+          <button id="btn-close-fork-room" type="button" class="icon-btn">&times;</button>
+        </div>
+
+        <form id="form-fork-room" class="modal-body">
+          <p class="modal-desc">
+            Split this room into two forked rooms. Both sides inherit the parent room's name, color, and notes by default. Use the custody buttons in the middle to assign each tag and connection to the <strong>Left</strong> room, <strong>Right</strong> room, or <strong>Both</strong> (default).
+          </p>
+
+          <!-- Side-by-Side Room Identity & Color Editors -->
+          <div class="fork-columns-grid">
+            <!-- Left Fork (Room A) -->
+            <div class="fork-side-card">
+              <div class="fork-side-header">
+                <span class="badge" style="color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">← Left Fork (Room A)</span>
+              </div>
+              <div class="form-group">
+                <label for="fork-left-name">Room Name <span class="req">*</span></label>
+                <input id="fork-left-name" type="text" required />
+              </div>
+              <div class="form-group">
+                <label>Color Accent</label>
+                <div id="fork-left-colors" class="color-swatch-row"></div>
+                <div class="hex-color-input-row">
+                  <input id="fork-left-color-picker" type="color" class="color-wheel-input" value="#0ea5e9" title="Pick custom color" />
+                  <input id="fork-left-hex-input" type="text" class="hex-text-input" placeholder="#RRGGBB or rainbow" maxlength="12" />
+                  <button id="btn-fork-left-apply-hex" type="button" class="btn btn-secondary btn-xs">Apply</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="fork-left-desc">Description / Notes</label>
+                <textarea id="fork-left-desc" rows="2" placeholder="Notes for Left Fork..."></textarea>
+              </div>
+            </div>
+
+            <!-- Right Fork (Room B) -->
+            <div class="fork-side-card">
+              <div class="fork-side-header">
+                <span class="badge" style="color: #c084fc; border-color: rgba(192, 132, 252, 0.4);">Right Fork (Room B) →</span>
+              </div>
+              <div class="form-group">
+                <label for="fork-right-name">Room Name <span class="req">*</span></label>
+                <input id="fork-right-name" type="text" required />
+              </div>
+              <div class="form-group">
+                <label>Color Accent</label>
+                <div id="fork-right-colors" class="color-swatch-row"></div>
+                <div class="hex-color-input-row">
+                  <input id="fork-right-color-picker" type="color" class="color-wheel-input" value="#0ea5e9" title="Pick custom color" />
+                  <input id="fork-right-hex-input" type="text" class="hex-text-input" placeholder="#RRGGBB or rainbow" maxlength="12" />
+                  <button id="btn-fork-right-apply-hex" type="button" class="btn btn-secondary btn-xs">Apply</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="fork-right-desc">Description / Notes</label>
+                <textarea id="fork-right-desc" rows="2" placeholder="Notes for Right Fork..."></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Custody Section 1: Tags -->
+          <div class="custody-section">
+            <div class="section-label-row">
+              <span class="section-label">Tags Custody (<span id="fork-tags-count">0</span>)</span>
+              <div class="custody-bulk-btns">
+                <button type="button" class="btn btn-xs btn-ghost fork-bulk-tags" data-custody="left">All ← Left</button>
+                <button type="button" class="btn btn-xs btn-ghost fork-bulk-tags" data-custody="both">All Both</button>
+                <button type="button" class="btn btn-xs btn-ghost fork-bulk-tags" data-custody="right">All Right →</button>
+              </div>
+            </div>
+            <div id="fork-tags-custody-list" class="custody-list"></div>
+          </div>
+
+          <!-- Custody Section 2: Connections -->
+          <div class="custody-section">
+            <div class="section-label-row">
+              <span class="section-label">Connections Custody (<span id="fork-conns-count">0</span>)</span>
+              <div class="custody-bulk-btns">
+                <button type="button" class="btn btn-xs btn-ghost fork-bulk-conns" data-custody="left">All ← Left</button>
+                <button type="button" class="btn btn-xs btn-ghost fork-bulk-conns" data-custody="both">All Both</button>
+                <button type="button" class="btn btn-xs btn-ghost fork-bulk-conns" data-custody="right">All Right →</button>
+              </div>
+            </div>
+            <div id="fork-conns-custody-list" class="custody-list"></div>
+          </div>
+
+          <div class="modal-footer">
+            <button id="btn-cancel-fork-room" type="button" class="btn btn-ghost">Cancel</button>
+            <button id="btn-submit-fork-room" type="submit" class="btn btn-primary">⑂ Confirm Fork into Two Rooms</button>
           </div>
         </form>
       </div>

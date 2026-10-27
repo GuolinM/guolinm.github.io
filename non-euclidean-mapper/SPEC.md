@@ -72,6 +72,9 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
   - **Color Accent** (preset swatches + dynamic swatches of any custom hex colors currently used by rooms in the map + special non-hex **Rainbow** gradient color option + hex code input `#RRGGBB` / `rainbow` and native color wheel picker)
 - Clicking/tapping any room on the map opens an **Inspector / Edit Side Panel** to view and edit its name, description, tags, color accent (including Rainbow and hex code input), and list of connections, or quickly add an adjacent connected room.
 - **Clone Room Button (`Clone`):** Available in the selected Room Inspector header and Quick Explore card. Opens the Room Creation modal with all fields (`name`, `color`, `tags`, `description`) copied from the selected room and pre-configured to connect to the selected room by default.
+- **Fork Room Button (`Fork`):** Available in the selected Room Inspector header and Quick Explore card. Opens a side-by-side comparison modal (`#modal-fork-room`) for splitting a room into two forked rooms (`Left Fork` and `Right Fork`):
+  - Both sides inherit the parent room's name, color accent (using the reusable `renderColorSwatchPicker` component), and description by default.
+  - Lists every **Tag** and every **Connection** attached to the parent room with 3-way custody toggle buttons in the middle (`← Left`, `Both` [default], `Right →`) plus bulk custody buttons (`All ← Left`, `All Both`, `All Right →`).
 
 ### Priority 3: Connection Creation Menu & Connection Inspector
 - Connect two rooms via:
