@@ -101,6 +101,7 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
 
 ### Priority 6: Mobile Friendliness & Responsive Touch UI
 - **Mobile Layout Detection (`<= 768px`):** Automatically adapts the workspace so the map canvas occupies 100% of the viewport.
+- **Icon-Only Mobile Topbar with Long-Press Accessibility:** Topbar buttons (`Undo`, `Rearrange`, `Share Link`, `Backups`, `File / Export`) hide their text labels on mobile to stay compact while preserving `aria-label`, `title`, and a touch long-press tooltip (`data-tooltip`, e.g. showing `"Rearrange"` on long press).
 - **Floating Bottom Action Bar (`#mobile-bottom-bar`):** Provides thumb-friendly buttons for **Search**, **+ Room**, **Connect**, **Select (Multi-Select)**, and **Fit** with live count badges.
 - **Dialog-Based Left Sidebar:** The Rooms & Search sidebar converts into a launchable modal dialog with backdrop on mobile, closing automatically when jumping to a room or connection.
 - **Bottom Sheet Inspector (`#right-sidebar`):** Selecting one room, a connection, or multiple nodes brings up a slide-up bottom sheet (with an interactive expand/minimize peek handle) instead of the desktop right sidebar.

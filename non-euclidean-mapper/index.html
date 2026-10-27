@@ -31,58 +31,58 @@
       </div>
 
       <div class="toolbar-primary">
-        <button id="btn-add-room" class="btn btn-primary" title="Add a new room (Shortcut: N or Double-click map)">
+        <button id="btn-add-room" class="btn btn-primary" aria-label="Add Room" data-tooltip="Add Room" title="Add a new room (Shortcut: N or Double-click map)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          Add Room <kbd>N</kbd>
+          <span class="btn-label">Add Room</span> <kbd>N</kbd>
         </button>
 
-        <button id="btn-add-connection" class="btn btn-accent" title="Connect two rooms via list or nested visual map (Shortcut: C)">
+        <button id="btn-add-connection" class="btn btn-accent" aria-label="Add Connection" data-tooltip="Add Connection" title="Connect two rooms via list or nested visual map (Shortcut: C)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
           </svg>
-          Add Connection <kbd>C</kbd>
+          <span class="btn-label">Add Connection</span> <kbd>C</kbd>
         </button>
 
         <div class="toolbar-divider"></div>
 
-        <button id="btn-undo" class="btn btn-ghost" title="Undo last change (Ctrl+Z)" disabled>
+        <button id="btn-undo" class="btn btn-ghost" aria-label="Undo" data-tooltip="Undo" title="Undo last change (Ctrl+Z)" disabled>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 7v6h6"></path>
             <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
           </svg>
-          Undo
+          <span class="btn-label">Undo</span>
         </button>
 
-        <button id="btn-auto-arrange" class="btn btn-ghost" title="Gently rearrange map layout (Undoable)">
+        <button id="btn-auto-arrange" class="btn btn-ghost" aria-label="Rearrange" data-tooltip="Rearrange" title="Gently rearrange map layout (Undoable)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="7" height="7" rx="1"></rect>
             <rect x="14" y="3" width="7" height="7" rx="1"></rect>
             <rect x="14" y="14" width="7" height="7" rx="1"></rect>
             <rect x="3" y="14" width="7" height="7" rx="1"></rect>
           </svg>
-          Rearrange
+          <span class="btn-label">Rearrange</span>
         </button>
 
-        <button id="btn-multi-select" class="btn btn-ghost" title="Toggle Multi-Select mode to select &amp; move multiple rooms at once (Shortcut: M or Shift+Click)">
+        <button id="btn-multi-select" class="btn btn-ghost" aria-label="Multi-Select" data-tooltip="Multi-Select" title="Toggle Multi-Select mode to select &amp; move multiple rooms at once (Shortcut: M or Shift+Click)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="13" height="13" rx="2" stroke-dasharray="3 2"></rect>
             <path d="M9 19h10a2 2 0 0 0 2-2V9"></path>
           </svg>
-          <span id="multi-select-btn-label">Multi-Select</span> <kbd>M</kbd>
+          <span id="multi-select-btn-label" class="btn-label">Multi-Select</span> <kbd>M</kbd>
         </button>
       </div>
 
       <div class="toolbar-right">
-        <div id="autosave-indicator" class="autosave-pill" title="Automatic local save & rolling backups enabled">
+        <div id="autosave-indicator" class="autosave-pill" aria-label="Autosave status: Saved" data-tooltip="Autosaved" title="Automatic local save &amp; rolling backups enabled">
           <span class="status-dot"></span>
-          <span id="autosave-text">Saved</span>
+          <span id="autosave-text" class="btn-label">Saved</span>
         </div>
 
-        <button id="btn-share-link" class="btn btn-ghost" title="Copy compressed shareable link (?save=...)">
+        <button id="btn-share-link" class="btn btn-ghost" aria-label="Share Link" data-tooltip="Share Link" title="Copy compressed shareable link (?save=...)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="18" cy="5" r="3"></circle>
             <circle cx="6" cy="12" r="3"></circle>
@@ -90,25 +90,25 @@
             <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
             <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
           </svg>
-          Share Link
+          <span class="btn-label">Share Link</span>
         </button>
 
-        <button id="btn-backups" class="btn btn-ghost" title="View autosave history & backups">
+        <button id="btn-backups" class="btn btn-ghost" aria-label="Backups" data-tooltip="Backups" title="View autosave history &amp; backups">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"></circle>
             <polyline points="12 6 12 12 16 14"></polyline>
           </svg>
-          Backups
+          <span class="btn-label">Backups</span>
         </button>
 
         <div class="dropdown">
-          <button id="btn-file-menu" class="btn btn-secondary">
+          <button id="btn-file-menu" class="btn btn-secondary" aria-label="File / Export" data-tooltip="File / Export" title="File &amp; Export Menu">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="7 10 12 15 17 10"></polyline>
               <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
-            File / Export
+            <span class="btn-label">File / Export</span>
           </button>
           <div id="file-dropdown-menu" class="dropdown-menu hidden">
             <button id="menu-export-link" class="dropdown-item">

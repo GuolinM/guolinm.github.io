@@ -3809,6 +3809,82 @@
       });
     }
 
+    // Long-press accessibility tooltip for icon buttons on mobile / touch devices
+    let longPressTimer = null;
+    let activeTooltipEl = null;
+    let suppressNextClick = false;
+
+    const removeLongPressTooltip = () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      if (activeTooltipEl) {
+        activeTooltipEl.remove();
+        activeTooltipEl = null;
+      }
+    };
+
+    document.addEventListener(
+      "touchstart",
+      (e) => {
+        removeLongPressTooltip();
+        if (e.touches.length !== 1) return;
+        const btn = e.target.closest("button[data-tooltip], button[aria-label], button[title], [data-tooltip]");
+        if (!btn) return;
+        const label =
+          btn.getAttribute("data-tooltip") ||
+          btn.getAttribute("aria-label") ||
+          btn.getAttribute("title");
+        if (!label) return;
+
+        longPressTimer = setTimeout(() => {
+          suppressNextClick = true;
+          const rect = btn.getBoundingClientRect();
+          const tip = document.createElement("div");
+          tip.className = "longpress-tooltip";
+          tip.setAttribute("role", "tooltip");
+          tip.textContent = label;
+          document.body.appendChild(tip);
+
+          const tipWidth = tip.offsetWidth || 100;
+          const clampedX = Math.max(
+            tipWidth / 2 + 8,
+            Math.min(window.innerWidth - tipWidth / 2 - 8, rect.left + rect.width / 2)
+          );
+          const showAbove = rect.bottom + 38 > window.innerHeight;
+          tip.style.left = `${Math.round(clampedX)}px`;
+          tip.style.top = showAbove
+            ? `${Math.max(8, Math.round(rect.top - 34))}px`
+            : `${Math.round(rect.bottom + 8)}px`;
+          activeTooltipEl = tip;
+        }, 420);
+      },
+      { passive: true }
+    );
+
+    document.addEventListener("touchmove", removeLongPressTooltip, { passive: true });
+    document.addEventListener("touchend", () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      if (activeTooltipEl) {
+        setTimeout(removeLongPressTooltip, 1100);
+      }
+    });
+    document.addEventListener(
+      "click",
+      (e) => {
+        if (suppressNextClick) {
+          suppressNextClick = false;
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      },
+      true
+    );
+
     // Pan & Zoom on Main Map
     setupPanAndZoom(
       mainSvg,
