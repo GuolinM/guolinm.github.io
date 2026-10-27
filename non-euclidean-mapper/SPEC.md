@@ -91,3 +91,10 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
 - **Instant Autosave:** Every change automatically saves to `localStorage` (`non_euclidean_mapper_current_v1`).
 - **Rolling Backups / Snapshots:** Keeps a history of recent automatic snapshots (`non_euclidean_mapper_backups_v1`, up to 25 autosave states + manual checkpoints) so you can preview and restore an earlier version anytime.
 - **File Export / Import:** Save and load `.json` / `.yaml` files directly to disk.
+
+### Priority 6: Mobile Friendliness & Responsive Touch UI
+- **Mobile Layout Detection (`<= 768px`):** Automatically adapts the workspace so the map canvas occupies 100% of the viewport.
+- **Floating Bottom Action Bar (`#mobile-bottom-bar`):** Provides thumb-friendly buttons for **Search**, **+ Room**, **Connect**, **Select (Multi-Select)**, and **Fit** with live count badges.
+- **Dialog-Based Left Sidebar:** The Rooms & Search sidebar converts into a launchable modal dialog with backdrop on mobile, closing automatically when jumping to a room or connection.
+- **Bottom Sheet Inspector (`#right-sidebar`):** Selecting one room, a connection, or multiple nodes brings up a slide-up bottom sheet (with an interactive expand/minimize peek handle) instead of the desktop right sidebar.
+- **Touch Canvas Gestures:** Full 1-finger room dragging, 1-finger canvas panning, 2-finger pinch-to-zoom around the pinch midpoint, and tap-to-select/deselect.

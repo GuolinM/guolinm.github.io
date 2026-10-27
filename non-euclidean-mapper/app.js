@@ -113,6 +113,32 @@
   // Backup tracking
   let lastAutoBackupTime = 0;
 
+  // Mobile layout & sheet state
+  let isMobileSheetPeek = false;
+  const mobileMediaQuery = window.matchMedia ? window.matchMedia("(max-width: 768px)") : null;
+
+  function isMobileLayout() {
+    return Boolean(mobileMediaQuery ? mobileMediaQuery.matches : window.innerWidth <= 768);
+  }
+
+  function openMobileSearchDialog() {
+    const leftSidebar = document.getElementById("left-sidebar");
+    const backdrop = document.getElementById("mobile-left-backdrop");
+    if (leftSidebar) leftSidebar.classList.add("mobile-dialog-open");
+    if (backdrop) backdrop.classList.remove("hidden");
+    setTimeout(() => {
+      const sInput = document.getElementById("search-input");
+      if (sInput) sInput.focus();
+    }, 40);
+  }
+
+  function closeMobileSearchDialog() {
+    const leftSidebar = document.getElementById("left-sidebar");
+    const backdrop = document.getElementById("mobile-left-backdrop");
+    if (leftSidebar) leftSidebar.classList.remove("mobile-dialog-open");
+    if (backdrop) backdrop.classList.add("hidden");
+  }
+
   // ==================== INITIALIZATION ====================
   function createEmptyMapState(title = "Untitled Map") {
     return {
@@ -1394,46 +1420,60 @@
   // ==================== DRAGGING & PAN/ZOOM INTERACTION ====================
   let activeRoomDrag = null;
 
+  function startRoomDragInteraction(roomId, clientX, clientY, isShift) {
+    const isGroupDrag =
+      isMultiSelectMode || multiSelectedRoomIds.has(roomId) || isShift;
+    const dragGroupInitialPositions = new Map();
+
+    if (isGroupDrag) {
+      const idsToMove = new Set(multiSelectedRoomIds);
+      idsToMove.add(roomId);
+      for (const id of idsToMove) {
+        const p = getRoomPos(id);
+        dragGroupInitialPositions.set(id, { x: p.x, y: p.y });
+      }
+    } else {
+      const p = getRoomPos(roomId);
+      dragGroupInitialPositions.set(roomId, { x: p.x, y: p.y });
+    }
+    pushUndoSnapshot();
+
+    activeRoomDrag = {
+      roomId,
+      startClientX: clientX,
+      startClientY: clientY,
+      dragGroupInitialPositions,
+      hasMoved: false,
+      isShift: Boolean(isShift),
+    };
+  }
+
   function attachRoomDragAndSelect(nodeEl, roomId) {
     nodeEl.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
       e.stopPropagation();
-
-      const isGroupDrag =
-        isMultiSelectMode || multiSelectedRoomIds.has(roomId) || e.shiftKey;
-      const dragGroupInitialPositions = new Map();
-
-      if (isGroupDrag) {
-        const idsToMove = new Set(multiSelectedRoomIds);
-        idsToMove.add(roomId);
-        for (const id of idsToMove) {
-          const p = getRoomPos(id);
-          dragGroupInitialPositions.set(id, { x: p.x, y: p.y });
-        }
-      } else {
-        const p = getRoomPos(roomId);
-        dragGroupInitialPositions.set(roomId, { x: p.x, y: p.y });
-      }
-      pushUndoSnapshot();
-
-      activeRoomDrag = {
-        roomId,
-        startClientX: e.clientX,
-        startClientY: e.clientY,
-        dragGroupInitialPositions,
-        hasMoved: false,
-        isShift: Boolean(e.shiftKey),
-      };
+      startRoomDragInteraction(roomId, e.clientX, e.clientY, e.shiftKey);
     });
+
+    nodeEl.addEventListener(
+      "touchstart",
+      (e) => {
+        if (e.touches.length !== 1) return;
+        e.stopPropagation();
+        const t = e.touches[0];
+        startRoomDragInteraction(roomId, t.clientX, t.clientY, false);
+      },
+      { passive: true }
+    );
   }
 
-  function handleGlobalRoomMouseMove(e) {
+  function handleGlobalRoomPointerMove(clientX, clientY) {
     if (!activeRoomDrag) return;
     const d = activeRoomDrag;
-    const dxScreen = e.clientX - d.startClientX;
-    const dyScreen = e.clientY - d.startClientY;
+    const dxScreen = clientX - d.startClientX;
+    const dyScreen = clientY - d.startClientY;
 
-    if (!d.hasMoved && Math.hypot(dxScreen, dyScreen) > 4) {
+    if (!d.hasMoved && Math.hypot(dxScreen, dyScreen) > 5) {
       d.hasMoved = true;
       // If dragging a room while in Multi-Select mode, ensure it's part of the active selection set
       if (isMultiSelectMode && !multiSelectedRoomIds.has(d.roomId)) {
@@ -1455,7 +1495,17 @@
     renderMainMap();
   }
 
-  function handleGlobalRoomMouseUp(e) {
+  function handleGlobalRoomMouseMove(e) {
+    handleGlobalRoomPointerMove(e.clientX, e.clientY);
+  }
+
+  function handleGlobalRoomTouchMove(e) {
+    if (!activeRoomDrag || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    handleGlobalRoomPointerMove(t.clientX, t.clientY);
+  }
+
+  function handleGlobalRoomMouseUp() {
     if (!activeRoomDrag) return;
     const d = activeRoomDrag;
     activeRoomDrag = null;
@@ -1467,6 +1517,7 @@
       if (isMultiSelectMode || d.isShift) {
         toggleRoomInMultiSelect(d.roomId);
       } else {
+        isMobileSheetPeek = false;
         selectRoom(d.roomId);
       }
       return;
@@ -1498,6 +1549,10 @@
     let startPanY = 0;
     let boxStartScreenX = 0;
     let boxStartScreenY = 0;
+    let pinchStartDist = 0;
+    let pinchStartZoom = 1;
+    let pinchCenterWorldX = 0;
+    let pinchCenterWorldY = 0;
     const isMainMap = svgEl && svgEl.id === "map-svg";
 
     svgEl.addEventListener("mousedown", (e) => {
@@ -1524,6 +1579,97 @@
       const vp = getViewport();
       startPanX = vp.panX;
       startPanY = vp.panY;
+    });
+
+    // Touch pan & 2-finger pinch-zoom on SVG canvas
+    svgEl.addEventListener(
+      "touchstart",
+      (e) => {
+        if (activeRoomDrag) return;
+        const vp = getViewport();
+        if (e.touches.length === 2) {
+          isPanning = false;
+          isBoxSelecting = false;
+          const t0 = e.touches[0];
+          const t1 = e.touches[1];
+          pinchStartDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+          pinchStartZoom = vp.zoom || 1;
+          const rect = svgEl.getBoundingClientRect();
+          const midX = (t0.clientX + t1.clientX) / 2 - rect.left;
+          const midY = (t0.clientY + t1.clientY) / 2 - rect.top;
+          pinchCenterWorldX = (midX - vp.panX) / pinchStartZoom;
+          pinchCenterWorldY = (midY - vp.panY) / pinchStartZoom;
+          return;
+        }
+        if (e.touches.length === 1) {
+          const t = e.touches[0];
+          hasMoved = false;
+          panStartX = t.clientX;
+          panStartY = t.clientY;
+          isPanning = true;
+          startPanX = vp.panX;
+          startPanY = vp.panY;
+        }
+      },
+      { passive: true }
+    );
+
+    svgEl.addEventListener(
+      "touchmove",
+      (e) => {
+        if (activeRoomDrag) return;
+        if (e.touches.length === 2 && pinchStartDist > 10) {
+          e.preventDefault();
+          const t0 = e.touches[0];
+          const t1 = e.touches[1];
+          const curDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+          const scale = curDist / pinchStartDist;
+          const vp = getViewport();
+          const newZoom = Math.max(0.25, Math.min(2.5, pinchStartZoom * scale));
+          const rect = svgEl.getBoundingClientRect();
+          const midX = (t0.clientX + t1.clientX) / 2 - rect.left;
+          const midY = (t0.clientY + t1.clientY) / 2 - rect.top;
+          vp.zoom = Number(newZoom.toFixed(3));
+          vp.panX = Math.round(midX - pinchCenterWorldX * vp.zoom);
+          vp.panY = Math.round(midY - pinchCenterWorldY * vp.zoom);
+          hasMoved = true;
+          onUpdate(false);
+          return;
+        }
+        if (e.touches.length === 1 && isPanning) {
+          const t = e.touches[0];
+          const dx = t.clientX - panStartX;
+          const dy = t.clientY - panStartY;
+          if (!hasMoved && Math.hypot(dx, dy) < 4) return;
+          hasMoved = true;
+          const vp = getViewport();
+          vp.panX = Math.round(startPanX + dx);
+          vp.panY = Math.round(startPanY + dy);
+          onUpdate(false);
+        }
+      },
+      { passive: false }
+    );
+
+    svgEl.addEventListener("touchend", (e) => {
+      if (e.touches.length < 2) {
+        pinchStartDist = 0;
+      }
+      if (e.touches.length === 0 && isPanning) {
+        isPanning = false;
+        if (hasMoved) {
+          onUpdate(true);
+        } else if (isMainMap) {
+          // Tap on empty background on mobile
+          if (isMultiSelectMode && multiSelectedRoomIds.size > 0) {
+            multiSelectedRoomIds.clear();
+            renderAll();
+          } else {
+            clearSelection();
+          }
+        }
+        hasMoved = false;
+      }
     });
 
     window.addEventListener("mousemove", (e) => {
@@ -1730,6 +1876,16 @@
     const badge = document.getElementById("room-count-badge");
     if (badge) badge.textContent = String(appState.rooms.length);
 
+    const mobSearchBadge = document.getElementById("mob-search-badge");
+    const mobSearchBtn = document.getElementById("mob-btn-search");
+    const hasFilter = searchQuery.trim() !== "" || activeTagFilters.size > 0;
+    if (mobSearchBadge) {
+      mobSearchBadge.textContent = String(appState.rooms.length);
+    }
+    if (mobSearchBtn) {
+      mobSearchBtn.classList.toggle("active", hasFilter);
+    }
+
     // Collect all unique tags with counts
     const tagCounts = new Map();
     for (const r of appState.rooms) {
@@ -1841,8 +1997,10 @@
         if (isMultiSelectMode || e.shiftKey) {
           toggleRoomInMultiSelect(room.id);
         } else {
+          isMobileSheetPeek = false;
           selectRoom(room.id);
           centerCameraOnRoom(room.id);
+          if (isMobileLayout()) closeMobileSearchDialog();
         }
       });
       resultsEl.appendChild(item);
@@ -1905,8 +2063,10 @@
         `;
 
         item.addEventListener("click", () => {
+          isMobileSheetPeek = false;
           selectConnection(conn.id);
           centerCameraOnConnection(conn.id);
+          if (isMobileLayout()) closeMobileSearchDialog();
         });
         resultsEl.appendChild(item);
       }
@@ -1914,6 +2074,7 @@
   }
 
   function renderInspector() {
+    const rightSidebar = document.getElementById("right-sidebar");
     const emptyEl = document.getElementById("inspector-empty");
     const multiEl = document.getElementById("inspector-multiselect");
     const roomEl = document.getElementById("inspector-room");
@@ -1921,6 +2082,8 @@
 
     const multiBtn = document.getElementById("btn-multi-select");
     const multiBtnLbl = document.getElementById("multi-select-btn-label");
+    const mobMultiBtn = document.getElementById("mob-btn-multiselect");
+    const mobMultiBadge = document.getElementById("mob-multi-badge");
     const inMultiMode = isMultiSelectMode || multiSelectedRoomIds.size > 0;
     if (multiBtn) {
       multiBtn.classList.toggle("active", inMultiMode);
@@ -1930,6 +2093,28 @@
         multiSelectedRoomIds.size > 0
           ? `Multi-Select (${multiSelectedRoomIds.size})`
           : "Multi-Select";
+    }
+    if (mobMultiBtn) {
+      mobMultiBtn.classList.toggle("active", inMultiMode);
+    }
+    if (mobMultiBadge) {
+      mobMultiBadge.textContent = String(multiSelectedRoomIds.size);
+      mobMultiBadge.classList.toggle("hidden", multiSelectedRoomIds.size === 0);
+    }
+
+    const selectedRoom = selectedRoomId ? getRoomById(selectedRoomId) : null;
+    const selectedConn = selectedConnectionId ? getConnectionById(selectedConnectionId) : null;
+    const hasMobileSheetOpen = inMultiMode || Boolean(selectedRoom) || Boolean(selectedConn);
+
+    if (rightSidebar) {
+      rightSidebar.classList.toggle("mobile-sheet-open", hasMobileSheetOpen);
+      rightSidebar.classList.toggle("mobile-sheet-peek", hasMobileSheetOpen && isMobileSheetPeek);
+    }
+    const peekLabel = document.getElementById("mobile-sheet-peek-label");
+    if (peekLabel) {
+      peekLabel.textContent = isMobileSheetPeek
+        ? "Tap handle to expand details ▲"
+        : "Tap handle to minimize sheet ▼";
     }
 
     if (inMultiMode) {
@@ -1970,9 +2155,6 @@
     }
 
     if (multiEl) multiEl.classList.add("hidden");
-
-    const selectedRoom = selectedRoomId ? getRoomById(selectedRoomId) : null;
-    const selectedConn = selectedConnectionId ? getConnectionById(selectedConnectionId) : null;
 
     emptyEl.classList.toggle("hidden", Boolean(selectedRoom || selectedConn));
     roomEl.classList.toggle("hidden", !selectedRoom);
@@ -3205,6 +3387,89 @@
     // Global room dragging listeners (single pair bound once for app lifetime)
     window.addEventListener("mousemove", handleGlobalRoomMouseMove);
     window.addEventListener("mouseup", handleGlobalRoomMouseUp);
+    window.addEventListener("touchmove", handleGlobalRoomTouchMove, { passive: true });
+    window.addEventListener("touchend", handleGlobalRoomMouseUp);
+
+    // Mobile layout listeners (Floating Bottom Bar, Search Dialog, and Bottom Sheet)
+    const syncBodyMobileClass = () => {
+      document.body.classList.toggle("is-mobile", isMobileLayout());
+      if (!isMobileLayout()) {
+        closeMobileSearchDialog();
+      }
+    };
+    syncBodyMobileClass();
+    if (mobileMediaQuery && mobileMediaQuery.addEventListener) {
+      mobileMediaQuery.addEventListener("change", syncBodyMobileClass);
+    } else {
+      window.addEventListener("resize", syncBodyMobileClass);
+    }
+
+    const mobSearchBtn = document.getElementById("mob-btn-search");
+    if (mobSearchBtn) {
+      mobSearchBtn.addEventListener("click", () => {
+        const leftSidebar = document.getElementById("left-sidebar");
+        if (leftSidebar && leftSidebar.classList.contains("mobile-dialog-open")) {
+          closeMobileSearchDialog();
+        } else {
+          openMobileSearchDialog();
+        }
+      });
+    }
+    const closeLeftDialogBtn = document.getElementById("btn-close-left-dialog");
+    if (closeLeftDialogBtn) {
+      closeLeftDialogBtn.addEventListener("click", closeMobileSearchDialog);
+    }
+    const leftBackdrop = document.getElementById("mobile-left-backdrop");
+    if (leftBackdrop) {
+      leftBackdrop.addEventListener("click", closeMobileSearchDialog);
+    }
+
+    const mobAddRoomBtn = document.getElementById("mob-btn-add-room");
+    if (mobAddRoomBtn) {
+      mobAddRoomBtn.addEventListener("click", () => {
+        closeMobileSearchDialog();
+        openAddRoomModal({ branchFromRoomId: selectedRoomId });
+      });
+    }
+
+    const mobAddConnBtn = document.getElementById("mob-btn-add-conn");
+    if (mobAddConnBtn) {
+      mobAddConnBtn.addEventListener("click", () => {
+        closeMobileSearchDialog();
+        openAddConnectionModal(selectedRoomId);
+      });
+    }
+
+    const mobMultiBtn = document.getElementById("mob-btn-multiselect");
+    if (mobMultiBtn) {
+      mobMultiBtn.addEventListener("click", () => {
+        closeMobileSearchDialog();
+        const enteringMulti = !isMultiSelectMode && multiSelectedRoomIds.size === 0;
+        if (enteringMulti) {
+          // Start in peek mode on mobile when entering multi-select so canvas is visible for tapping nodes
+          isMobileSheetPeek = true;
+        }
+        toggleMultiSelectMode();
+      });
+    }
+
+    const mobFitBtn = document.getElementById("mob-btn-fit");
+    if (mobFitBtn) {
+      mobFitBtn.addEventListener("click", () => {
+        closeMobileSearchDialog();
+        fitMapViewport(mainSvg, appState.mapDisplayConfig.viewport);
+        saveStateToLocal(false);
+        renderMainMap();
+      });
+    }
+
+    const sheetHandle = document.getElementById("mobile-sheet-handle");
+    if (sheetHandle) {
+      sheetHandle.addEventListener("click", () => {
+        isMobileSheetPeek = !isMobileSheetPeek;
+        renderInspector();
+      });
+    }
 
     // Pan & Zoom on Main Map
     setupPanAndZoom(
@@ -3934,6 +4199,7 @@
       if (e.key === "Escape") {
         closeAddRoomModal();
         closeAddConnectionModal();
+        closeMobileSearchDialog();
         document.getElementById("modal-backups").classList.add("hidden");
         if (!isTyping) clearSelection();
         return;
