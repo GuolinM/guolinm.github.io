@@ -349,6 +349,56 @@ html, body {
     overflow: hidden !important;
     border-right: none !important;
   }
+
+  /* Landscape Mode: Left sidebar moves to Top, Right sidebar moves to Bottom */
+  body.landscape-mode .workspace {
+    flex-direction: column;
+  }
+
+  body.landscape-mode .sidebar-left {
+    width: 100%;
+    max-height: 210px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    transition: max-height 0.18s ease;
+  }
+
+  body.landscape-mode .sidebar-left.collapsed {
+    width: 100% !important;
+    max-height: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    border-bottom: none !important;
+  }
+
+  body.landscape-mode .sidebar-left .room-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 6px;
+    align-content: start;
+  }
+
+  body.landscape-mode .sidebar-right {
+    width: 100%;
+    max-height: 32vh;
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  body.landscape-mode .sidebar-right .inspector-placeholder {
+    flex-direction: row;
+    justify-content: center;
+    padding: 12px 20px;
+    gap: 16px;
+    text-align: left;
+  }
+
+  body.landscape-mode .sidebar-right .inspector-placeholder .quick-tips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 0;
+  }
 }
 
 .map-hud-top-left {

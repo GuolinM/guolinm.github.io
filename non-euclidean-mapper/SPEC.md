@@ -101,6 +101,7 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
 - **File Export / Import:** Save and load `.json` / `.yaml` files directly to disk.
 
 ### Priority 6: Mobile Friendliness & Responsive Touch UI
+- **Landscape Mode Toggle (`#btn-landscape-mode`):** Topbar toggle on desktop that switches `.workspace` to `flex-direction: column` (`body.landscape-mode`), moving the Left Sidebar (Rooms & Search) to the **top** and the Right Sidebar (Inspector) to the **bottom** while preserving all functionality (including collapsing/expanding the top panel).
 - **Mobile Layout Detection (`<= 768px`):** Automatically adapts the workspace so the map canvas occupies 100% of the viewport.
 - **Icon-Only Mobile Topbar with Long-Press Accessibility:** Topbar buttons (`Undo`, `Rearrange`, `Share Link`, `Backups`, `File / Export`) hide their text labels on mobile to stay compact while preserving `aria-label`, `title`, and a touch long-press tooltip (`data-tooltip`, e.g. showing `"Rearrange"` on long press).
 - **Floating Bottom Action Bar (`#mobile-bottom-bar`):** Provides thumb-friendly buttons for **Search**, **+ Room**, **Connect**, **Select (Multi-Select)**, and **Fit** with live count badges.

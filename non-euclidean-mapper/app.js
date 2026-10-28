@@ -3970,6 +3970,38 @@
     document.getElementById("btn-multi-select").addEventListener("click", () => {
       toggleMultiSelectMode();
     });
+
+    // Landscape Mode toggle (moves Left & Right sidebars to Top & Bottom)
+    const btnLandscape = document.getElementById("btn-landscape-mode");
+    const applyLandscapeMode = (enabled) => {
+      document.body.classList.toggle("landscape-mode", Boolean(enabled));
+      if (btnLandscape) {
+        btnLandscape.classList.toggle("active", Boolean(enabled));
+      }
+      try {
+        localStorage.setItem("non_euclidean_mapper_landscape_v1", enabled ? "1" : "0");
+      } catch (e) {
+        // Ignore storage errors
+      }
+    };
+    try {
+      if (localStorage.getItem("non_euclidean_mapper_landscape_v1") === "1") {
+        applyLandscapeMode(true);
+      }
+    } catch (e) {
+      // Ignore storage errors
+    }
+    if (btnLandscape) {
+      btnLandscape.addEventListener("click", () => {
+        const next = !document.body.classList.contains("landscape-mode");
+        applyLandscapeMode(next);
+        showToast(
+          next
+            ? "Landscape Mode enabled (Top & Bottom panels)"
+            : "Standard Mode enabled (Left & Right sidebars)"
+        );
+      });
+    }
     document.getElementById("btn-close-multiselect").addEventListener("click", () => {
       toggleMultiSelectMode(false);
     });
