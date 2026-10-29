@@ -57,14 +57,16 @@ html, body {
 
 /* ==================== TOP TOOLBAR ==================== */
 .topbar {
-  height: 52px;
+  min-height: 52px;
+  height: auto;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  padding: 0 14px;
-  gap: 12px;
+  padding: 6px 14px;
+  gap: 8px 12px;
   z-index: 30;
   user-select: none;
 }
@@ -73,7 +75,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 210px;
+  min-width: 190px;
 }
 
 .brand-icon {
@@ -115,8 +117,9 @@ html, body {
 .toolbar-primary,
 .toolbar-right {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
 }
 
 .toolbar-divider {
@@ -2008,8 +2011,9 @@ textarea {
 
   /* Compact Icon-Only Top Toolbar on Mobile */
   .topbar {
-    height: 48px;
-    padding: 0 8px;
+    min-height: 48px;
+    height: auto;
+    padding: 6px 8px;
     gap: 6px;
   }
 

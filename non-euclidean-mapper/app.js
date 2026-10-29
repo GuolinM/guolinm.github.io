@@ -2928,6 +2928,22 @@
     document.getElementById("fork-left-desc").value = parentRoom.description || "";
     document.getElementById("fork-right-desc").value = parentRoom.description || "";
 
+    const forkCreateConnEl = document.getElementById("fork-create-conn");
+    if (forkCreateConnEl) forkCreateConnEl.checked = true;
+    const forkConnTwoWayEl = document.getElementById("fork-conn-twoway");
+    if (forkConnTwoWayEl) forkConnTwoWayEl.checked = true;
+    const forkConnWarpEl = document.getElementById("fork-conn-warp");
+    if (forkConnWarpEl) forkConnWarpEl.checked = false;
+    const forkConnLeftLabelEl = document.getElementById("fork-conn-left-label");
+    if (forkConnLeftLabelEl) forkConnLeftLabelEl.value = "";
+    const forkConnRightLabelEl = document.getElementById("fork-conn-right-label");
+    if (forkConnRightLabelEl) {
+      forkConnRightLabelEl.value = "";
+      forkConnRightLabelEl.disabled = false;
+    }
+    const forkBetweenFieldsEl = document.getElementById("fork-between-conn-fields");
+    if (forkBetweenFieldsEl) forkBetweenFieldsEl.classList.remove("hidden");
+
     renderForkModalColors();
     renderForkCustodyLists();
 
@@ -4707,6 +4723,33 @@
       });
     });
 
+    const forkCreateConnCheckbox = document.getElementById("fork-create-conn");
+    if (forkCreateConnCheckbox) {
+      forkCreateConnCheckbox.addEventListener("change", () => {
+        const fieldsEl = document.getElementById("fork-between-conn-fields");
+        if (fieldsEl) fieldsEl.classList.toggle("hidden", !forkCreateConnCheckbox.checked);
+      });
+    }
+
+    const forkConnTwoWayCheckbox = document.getElementById("fork-conn-twoway");
+    if (forkConnTwoWayCheckbox) {
+      forkConnTwoWayCheckbox.addEventListener("change", () => {
+        const rightLabelEl = document.getElementById("fork-conn-right-label");
+        if (rightLabelEl) rightLabelEl.disabled = !forkConnTwoWayCheckbox.checked;
+      });
+    }
+
+    document.querySelectorAll("#fork-preset-chips .chip-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const leftInput = document.getElementById("fork-conn-left-label");
+        const rightInput = document.getElementById("fork-conn-right-label");
+        if (leftInput) leftInput.value = btn.getAttribute("data-val") || "";
+        if (rightInput && isStandardPresetLabel(rightInput.value)) {
+          rightInput.value = btn.getAttribute("data-rev") || "";
+        }
+      });
+    });
+
     const formForkRoom = document.getElementById("form-fork-room");
     if (formForkRoom) {
       formForkRoom.addEventListener("submit", (e) => {
@@ -4718,6 +4761,11 @@
         const rightName = document.getElementById("fork-right-name").value.trim() || parentRoom.name;
         const leftDesc = document.getElementById("fork-left-desc").value.trim();
         const rightDesc = document.getElementById("fork-right-desc").value.trim();
+        const createBetweenConn = document.getElementById("fork-create-conn")?.checked ?? true;
+        const connIsTwoWay = document.getElementById("fork-conn-twoway")?.checked ?? true;
+        const connIsWarp = document.getElementById("fork-conn-warp")?.checked ?? false;
+        const leftConnLabel = (document.getElementById("fork-conn-left-label")?.value || "").trim();
+        const rightConnLabel = (document.getElementById("fork-conn-right-label")?.value || "").trim();
 
         pushUndoSnapshot();
 
@@ -4744,7 +4792,15 @@
         };
 
         const origPos = getRoomPos(parentRoom.id);
-        const freeRightPos = findNearestFreePosition(origPos.x + 215, origPos.y, rightRoom.id);
+        let offset = { dx: 215, dy: 0 };
+        if (createBetweenConn && (leftConnLabel || rightConnLabel)) {
+          offset = getDirectionalOffsetFromLabel(leftConnLabel, rightConnLabel);
+        }
+        const freeRightPos = findNearestFreePosition(
+          origPos.x + offset.dx,
+          origPos.y + offset.dy,
+          rightRoom.id
+        );
         appState.rooms.push(rightRoom);
         setRoomPos(rightRoom.id, freeRightPos.x, freeRightPos.y);
 
@@ -4773,6 +4829,20 @@
               notes: conn.notes || "",
             });
           }
+        }
+
+        // Create default connection between Left Fork and Right Fork if enabled
+        if (createBetweenConn) {
+          appState.connections.push({
+            id: generateId("c"),
+            fromRoomId: parentRoom.id,
+            toRoomId: rightRoom.id,
+            bidirectional: connIsTwoWay,
+            style: connIsWarp ? "warp" : "normal",
+            label: leftConnLabel,
+            reverseLabel: connIsTwoWay ? rightConnLabel : "",
+            notes: "",
+          });
         }
 
         closeForkRoomModal();
@@ -4963,13 +5033,11 @@
         appState = validateAndNormalizeState(JSON.parse(savedRaw));
         hadExistingSavedMap = appState.rooms.length > 0;
       } else {
-        appState = createDemoMapState();
-        saveStateToLocal(false);
-        createBackupSnapshot("Initial Demo Map", true);
+        appState = createEmptyMapState("Untitled Map");
       }
     } catch (e) {
-      console.warn("Could not load saved state, starting with demo map:", e);
-      appState = createDemoMapState();
+      console.warn("Could not load saved state, starting with empty map:", e);
+      appState = createEmptyMapState("Untitled Map");
     }
 
     bindEvents();

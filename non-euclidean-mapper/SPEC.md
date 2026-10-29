@@ -74,6 +74,7 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
 - **Clone Room Button (`Clone`):** Available in the selected Room Inspector header and Quick Explore card. Opens the Room Creation modal with all fields (`name`, `color`, `tags`, `description`) copied from the selected room and pre-configured to connect to the selected room by default.
 - **Fork Room Button (`Fork`):** Available in the selected Room Inspector header and Quick Explore card. Opens a side-by-side comparison modal (`#modal-fork-room`) for splitting a room into two forked rooms (`Left Room` and `Right Room`):
   - Both sides inherit the parent room's name, color accent (using the reusable `renderColorSwatchPicker` component), and description by default.
+  - Includes a dedicated **Create Connection Between Forked Rooms** section (checked by default) with a **Left → Right Connection Name** input on the left side (with quick cardinal/ordinal chips) and a **Right → Left Connection Name** input on the right side, plus Two-way and Warp toggles.
   - Lists every **Tag** and every **Connection** attached to the parent room with 3-way toggle buttons in the middle (`← Left`, `Both` [default], `Right →`) plus bulk buttons (`All ← Left`, `All Both`, `All Right →`).
 
 ### Priority 3: Connection Creation Menu & Connection Inspector
@@ -101,6 +102,8 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
 - **File Export / Import:** Save and load `.json` / `.yaml` files directly to disk.
 
 ### Priority 6: Mobile Friendliness & Responsive Touch UI
+- **First-Visit Empty Map Onboarding (`#map-empty-state`):** First-time visitors (with no saved map in `localStorage` and no `?save=` parameter) start on an empty map with the onboarding dialog (`+ Add First Room` or `Load Demo Non-Euclidean Map`).
+- **Responsive Multi-Line Top Toolbar (`.topbar`):** Automatically wraps onto two lines (`flex-wrap: wrap; height: auto`) when the viewport width cannot fit all toolbar items on a single row.
 - **Landscape Mode Toggle (`#btn-landscape-mode`):** Topbar toggle on desktop that switches `.workspace` to `flex-direction: column` (`body.landscape-mode`), moving the Left Sidebar (Rooms & Search) to the **top** and the Right Sidebar (Inspector) to the **bottom** while preserving all functionality (including collapsing/expanding the top panel).
 - **Mobile Layout Detection (`<= 768px`):** Automatically adapts the workspace so the map canvas occupies 100% of the viewport.
 - **Icon-Only Mobile Topbar with Long-Press Accessibility:** Topbar buttons (`Undo`, `Rearrange`, `Share Link`, `Backups`, `File / Export`) hide their text labels on mobile to stay compact while preserving `aria-label`, `title`, and a touch long-press tooltip (`data-tooltip`, e.g. showing `"Rearrange"` on long press).

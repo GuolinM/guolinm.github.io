@@ -770,6 +770,49 @@
             </div>
           </div>
 
+          <!-- Section 0: Default Connection Between Forked Rooms -->
+          <div class="custody-section fork-between-conn-section">
+            <div class="section-label-row">
+              <label class="checkbox-label" style="font-weight: 600; color: var(--text-main);">
+                <input id="fork-create-conn" type="checkbox" checked />
+                Create Connection Between Forked Rooms
+              </label>
+              <div class="checkbox-row">
+                <label class="checkbox-label">
+                  <input id="fork-conn-twoway" type="checkbox" checked />
+                  Two-way
+                </label>
+                <label class="checkbox-label">
+                  <input id="fork-conn-warp" type="checkbox" />
+                  Warp
+                </label>
+              </div>
+            </div>
+
+            <div id="fork-between-conn-fields" class="fork-columns-grid">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="fork-conn-left-label">Left → Right Connection Name</label>
+                <input id="fork-conn-left-label" type="text" placeholder="e.g. East, Mirror, Door..." />
+                <div class="preset-chips" id="fork-preset-chips">
+                  <button type="button" class="chip-btn" data-val="North" data-rev="South">N</button>
+                  <button type="button" class="chip-btn" data-val="South" data-rev="North">S</button>
+                  <button type="button" class="chip-btn" data-val="East" data-rev="West">E</button>
+                  <button type="button" class="chip-btn" data-val="West" data-rev="East">W</button>
+                  <button type="button" class="chip-btn" data-val="Northeast" data-rev="Southwest">NE</button>
+                  <button type="button" class="chip-btn" data-val="Northwest" data-rev="Southeast">NW</button>
+                  <button type="button" class="chip-btn" data-val="Southeast" data-rev="Northwest">SE</button>
+                  <button type="button" class="chip-btn" data-val="Southwest" data-rev="Northeast">SW</button>
+                  <button type="button" class="chip-btn" data-val="Up" data-rev="Down">Up</button>
+                  <button type="button" class="chip-btn" data-val="Down" data-rev="Up">Down</button>
+                </div>
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="fork-conn-right-label">Right → Left Connection Name</label>
+                <input id="fork-conn-right-label" type="text" placeholder="e.g. West, Return..." />
+              </div>
+            </div>
+          </div>
+
           <!-- Section 1: Tags -->
           <div class="custody-section">
             <div class="section-label-row">
