@@ -122,6 +122,11 @@ html, body {
   gap: 6px 8px;
 }
 
+.toolbar-right {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
 .toolbar-divider {
   width: 1px;
   height: 22px;
@@ -1737,6 +1742,15 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.fork-conn-right-group {
+  text-align: right;
+  align-items: flex-end;
+}
+
+.fork-conn-right-group input {
+  text-align: right;
 }
 
 .custody-section {
