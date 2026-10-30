@@ -659,6 +659,70 @@ html, body {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
 }
 
+.tag-pill.tag-rainbow,
+.mini-tag.tag-rainbow,
+.chip-btn.tag-rainbow {
+  background: linear-gradient(
+    135deg,
+    rgba(239, 68, 68, 0.28) 0%,
+    rgba(249, 115, 22, 0.28) 20%,
+    rgba(234, 179, 8, 0.28) 40%,
+    rgba(16, 185, 129, 0.28) 60%,
+    rgba(6, 182, 212, 0.28) 80%,
+    rgba(139, 92, 246, 0.28) 100%
+  );
+  border: 1px solid rgba(192, 132, 252, 0.65);
+  color: #f8fafc;
+}
+
+.tag-pill.tag-rainbow:hover,
+.chip-btn.tag-rainbow:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(239, 68, 68, 0.42) 0%,
+    rgba(249, 115, 22, 0.42) 20%,
+    rgba(234, 179, 8, 0.42) 40%,
+    rgba(16, 185, 129, 0.42) 60%,
+    rgba(6, 182, 212, 0.42) 80%,
+    rgba(139, 92, 246, 0.42) 100%
+  );
+}
+
+.tag-pill.tag-rainbow.active {
+  background: linear-gradient(
+    135deg,
+    #ef4444 0%,
+    #f97316 20%,
+    #eab308 40%,
+    #10b981 60%,
+    #06b6d4 80%,
+    #8b5cf6 100%
+  );
+  border-color: #f8fafc;
+  color: #fff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+}
+
+.color-swatch.default-tag-swatch {
+  background: rgba(56, 189, 248, 0.16);
+  border: 1.5px dashed rgba(56, 189, 248, 0.65);
+  color: #7dd3fc;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  width: auto;
+  padding: 0 7px;
+  border-radius: 999px;
+}
+
+.color-swatch.default-tag-swatch.active {
+  border-style: solid;
+  border-color: #fff;
+  background: rgba(56, 189, 248, 0.28);
+}
+
 .section-label-actions {
   display: inline-flex;
   align-items: center;

@@ -82,9 +82,11 @@
 
   // ==================== GLOBAL TAG COLORS ====================
   /**
-   * Tag colors are stored map-wide in `appState.mapDisplayConfig.tagColors` ({ [tag]: "#rrggbb" }).
-   * Older saves without this field simply have no colored tags.
+   * Tag colors are stored map-wide in `appState.mapDisplayConfig.tagColors` ({ [tag]: "#rrggbb" | "rainbow" }).
+   * Older saves without this field simply have no colored tags (default blue-ish tag style).
    */
+  const DEFAULT_TAG_COLOR = "default";
+
   function getTagColorsMap() {
     if (!appState || !appState.mapDisplayConfig) return {};
     if (!appState.mapDisplayConfig.tagColors || typeof appState.mapDisplayConfig.tagColors !== "object") {
@@ -97,12 +99,16 @@
     if (!tag || !appState || !appState.mapDisplayConfig) return null;
     const map = appState.mapDisplayConfig.tagColors;
     if (!map || !Object.prototype.hasOwnProperty.call(map, tag)) return null;
-    return normalizeHexColor(map[tag]);
+    return normalizeRoomColor(map[tag]);
   }
 
   function setTagColor(tag, color) {
     const map = getTagColorsMap();
-    const norm = normalizeHexColor(color);
+    if (!color || String(color).trim().toLowerCase() === DEFAULT_TAG_COLOR) {
+      delete map[tag];
+      return;
+    }
+    const norm = normalizeRoomColor(color);
     if (norm) map[tag] = norm;
     else delete map[tag];
   }
@@ -125,6 +131,7 @@
   }
 
   function getTagColorCssVars(color) {
+    if (!color || color === DEFAULT_TAG_COLOR || color === RAINBOW_COLOR) return "";
     return (
       `--tag-color: ${color}; --tag-bg: ${hexToRgba(color, 0.2)}; ` +
       `--tag-bg-hover: ${hexToRgba(color, 0.32)}; --tag-border: ${hexToRgba(color, 0.6)}; ` +
@@ -135,7 +142,10 @@
   /** Applies the global tag color (if any) to an HTML tag chip element. */
   function applyTagColorToEl(el, tag) {
     const c = getTagColor(tag);
-    if (el && c) {
+    if (!el || !c) return el;
+    if (c === RAINBOW_COLOR) {
+      el.classList.add("tag-rainbow");
+    } else {
       el.classList.add("tag-colored");
       el.style.cssText += getTagColorCssVars(c);
     }
@@ -145,13 +155,15 @@
   /** Returns { cls, style } fragments for building tag chips via HTML template strings. */
   function tagColorAttrs(tag) {
     const c = getTagColor(tag);
-    return c ? { cls: " tag-colored", style: ` style="${getTagColorCssVars(c)}"` } : { cls: "", style: "" };
+    if (!c) return { cls: "", style: "" };
+    if (c === RAINBOW_COLOR) return { cls: " tag-rainbow", style: "" };
+    return { cls: " tag-colored", style: ` style="${getTagColorCssVars(c)}"` };
   }
 
   function getUsedTagColors() {
     const seen = new Set();
     for (const c of Object.values(getTagColorsMap())) {
-      const norm = normalizeHexColor(c);
+      const norm = normalizeRoomColor(c);
       if (norm) seen.add(norm);
     }
     return Array.from(seen);
@@ -166,7 +178,7 @@
       ? Object.entries(raw)
       : [];
     for (const [tag, color] of entries) {
-      const norm = normalizeHexColor(String(color ?? ""));
+      const norm = normalizeRoomColor(String(color ?? ""));
       const tagStr = String(tag ?? "").trim();
       if (tagStr && norm) out[tagStr] = norm;
     }
@@ -1487,7 +1499,19 @@
           class: "room-tag-badge-text",
         });
         const tagColor = getTagColor(t);
-        if (tagColor) {
+        if (tagColor === RAINBOW_COLOR) {
+          tagRect.setAttribute(
+            "fill",
+            isNestedPicker ? "url(#nested-rainbow-tag-bg-gradient)" : "url(#rainbow-tag-bg-gradient)"
+          );
+          tagRect.setAttribute(
+            "stroke",
+            isNestedPicker
+              ? "url(#nested-rainbow-tag-stroke-gradient)"
+              : "url(#rainbow-tag-stroke-gradient)"
+          );
+          tagTxt.style.fill = "#f8fafc";
+        } else if (tagColor) {
           tagRect.style.fill = hexToRgba(tagColor, 0.24);
           tagRect.style.stroke = hexToRgba(tagColor, 0.7);
           tagTxt.style.fill = mixHexWithWhite(tagColor, 0.45);
@@ -3124,7 +3148,7 @@
 
   // ==================== TAG COLORS MODAL ====================
   const tagColorModalState = {
-    color: ROOM_COLORS[0],
+    color: DEFAULT_TAG_COLOR,
     selected: new Set(),
     search: "",
   };
@@ -3138,19 +3162,22 @@
   }
 
   function getTagColorSwatchOptions() {
-    const seen = new Set();
-    const list = [];
+    const seen = new Set([DEFAULT_TAG_COLOR]);
+    const list = [DEFAULT_TAG_COLOR]; // First selection is always Default (resets to usual blue-ish color)
     const add = (c) => {
-      const norm = normalizeHexColor(c);
+      const norm = normalizeRoomColor(c);
       if (norm && !seen.has(norm)) {
         seen.add(norm);
         list.push(norm);
       }
     };
-    getUsedTagColors().forEach(add); // existing tag colors first
+    getUsedTagColors().forEach(add); // existing tag colors
     ROOM_COLORS.forEach(add);
+    add(RAINBOW_COLOR); // Rainbow option just like nodes
     appState.rooms.forEach((r) => add(r.color));
-    add(tagColorModalState.color);
+    if (tagColorModalState.color && tagColorModalState.color !== DEFAULT_TAG_COLOR) {
+      add(tagColorModalState.color);
+    }
     return list;
   }
 
@@ -3165,7 +3192,7 @@
     const firstColored = Array.from(tagColorModalState.selected)
       .map((t) => getTagColor(t))
       .find(Boolean);
-    tagColorModalState.color = firstColored || getUsedTagColors()[0] || ROOM_COLORS[0];
+    tagColorModalState.color = firstColored || DEFAULT_TAG_COLOR;
 
     const searchInput = document.getElementById("tag-color-search");
     if (searchInput) searchInput.value = "";
@@ -3180,7 +3207,7 @@
   function renderTagColorModal() {
     const modal = document.getElementById("modal-tag-colors");
     if (!modal || modal.classList.contains("hidden")) return;
-    const color = tagColorModalState.color;
+    const color = tagColorModalState.color || DEFAULT_TAG_COLOR;
 
     // Color picker area
     const swatchWrap = document.getElementById("tag-color-swatches");
@@ -3189,9 +3216,23 @@
     for (const c of getTagColorSwatchOptions()) {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "color-swatch" + (c === color ? " active" : "") + (usedColors.has(c) ? " used-by-tag" : "");
-      btn.style.background = c;
-      btn.title = usedColors.has(c) ? `${c} (used by a tag)` : c;
+      const isDefault = c === DEFAULT_TAG_COLOR;
+      const isRainbow = c === RAINBOW_COLOR;
+      btn.className =
+        "color-swatch" +
+        (c === color ? " active" : "") +
+        (isDefault ? " default-tag-swatch" : "") +
+        (isRainbow ? " rainbow" : "") +
+        (!isDefault && usedColors.has(c) ? " used-by-tag" : "");
+      if (isDefault) {
+        btn.textContent = "Default";
+        btn.title = "Default (Reset to standard blue tag color)";
+      } else if (isRainbow) {
+        btn.title = usedColors.has(c) ? "Rainbow (used by a tag)" : "Rainbow";
+      } else {
+        btn.style.background = c;
+        btn.title = usedColors.has(c) ? `${c} (used by a tag)` : c;
+      }
       btn.addEventListener("click", () => {
         tagColorModalState.color = c;
         renderTagColorModal();
@@ -3199,14 +3240,28 @@
       swatchWrap.appendChild(btn);
     }
     const picker = document.getElementById("tag-color-picker");
-    if (picker && document.activeElement !== picker) picker.value = color;
+    if (picker && document.activeElement !== picker && color !== DEFAULT_TAG_COLOR && color !== RAINBOW_COLOR) {
+      picker.value = color;
+    }
     const hexInput = document.getElementById("tag-color-hex-input");
-    if (hexInput && document.activeElement !== hexInput) hexInput.value = color;
+    if (hexInput && document.activeElement !== hexInput) {
+      hexInput.value = color;
+    }
 
     const preview = document.getElementById("tag-color-preview");
     if (preview) {
-      preview.style.cssText = getTagColorCssVars(color);
-      preview.textContent = color;
+      preview.className = "tag-pill";
+      preview.style.cssText = "";
+      if (color === DEFAULT_TAG_COLOR) {
+        preview.textContent = "#default";
+      } else if (color === RAINBOW_COLOR) {
+        preview.classList.add("tag-rainbow");
+        preview.textContent = "#rainbow";
+      } else {
+        preview.classList.add("tag-colored");
+        preview.style.cssText = getTagColorCssVars(color);
+        preview.textContent = color;
+      }
     }
 
     // Tag list
@@ -3232,7 +3287,7 @@
         <input type="checkbox" ${isChecked ? "checked" : ""} />
         <span class="tag-pill${tc.cls}"${tc.style}>#${escapeHtml(tag)}</span>
         <span class="tag-color-row-meta">${counts.get(tag)} room${counts.get(tag) === 1 ? "" : "s"}${
-          current ? ` &middot; <code>${current}</code>` : " &middot; no color"
+          current ? ` &middot; <code>${escapeHtml(current)}</code>` : " &middot; default"
         }</span>
         <button type="button" class="btn btn-xs btn-ghost tag-color-row-apply" title="Apply current color to #${escapeHtml(
           tag
@@ -3263,12 +3318,13 @@
   function applyColorToTags(tags, color) {
     if (!tags || tags.length === 0) return;
     pushUndoSnapshot();
-    for (const t of tags) setTagColor(t, color);
+    const isDefault = !color || color === DEFAULT_TAG_COLOR;
+    for (const t of tags) setTagColor(t, isDefault ? null : color);
     saveStateToLocal();
     renderAll();
     renderTagColorModal();
     const label = tags.length === 1 ? `#${tags[0]}` : `${tags.length} tags`;
-    showToast(color ? `Colored ${label} ${color}` : `Removed color from ${label}`);
+    showToast(isDefault ? `Reset ${label} to default color` : `Colored ${label} ${color}`);
   }
 
   function bindTagColorModalEvents() {
@@ -3287,9 +3343,15 @@
     document.getElementById("btn-tag-color-done").addEventListener("click", closeTagColorModal);
 
     const applyHex = () => {
-      const norm = normalizeHexColor(document.getElementById("tag-color-hex-input").value);
+      const raw = (document.getElementById("tag-color-hex-input").value || "").trim().toLowerCase();
+      if (raw === DEFAULT_TAG_COLOR) {
+        tagColorModalState.color = DEFAULT_TAG_COLOR;
+        renderTagColorModal();
+        return;
+      }
+      const norm = normalizeRoomColor(raw);
       if (!norm) {
-        showToast("Enter a valid hex color like #38bdf8");
+        showToast("Enter a valid hex color like #38bdf8, 'rainbow', or 'default'");
         return;
       }
       tagColorModalState.color = norm;
