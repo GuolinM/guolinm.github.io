@@ -191,7 +191,17 @@
         <div class="tag-filter-section">
           <div class="section-label-row">
             <span class="section-label">Filter by Tag</span>
-            <button id="btn-clear-tag-filter" class="link-btn hidden">Clear</button>
+            <div class="section-label-actions">
+              <button id="btn-clear-tag-filter" class="link-btn hidden">Clear</button>
+              <button id="btn-tag-colors-filter" type="button" class="icon-btn tag-palette-btn" aria-label="Tag Colors" data-tooltip="Tag Colors" title="Color tags">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22a10 10 0 1 1 10-10c0 2.5-2 3.5-4 3.5h-2a2 2 0 0 0-1.5 3.3A1.9 1.9 0 0 1 12 22z"></path>
+                  <circle cx="7.5" cy="10.5" r="1.3" fill="currentColor"></circle>
+                  <circle cx="11" cy="6.5" r="1.3" fill="currentColor"></circle>
+                  <circle cx="16" cy="8" r="1.3" fill="currentColor"></circle>
+                </svg>
+              </button>
+            </div>
           </div>
           <div id="tag-filter-list" class="tag-chip-list">
             <span class="muted-hint">No tags yet</span>
@@ -442,7 +452,17 @@
             </div>
 
             <div class="form-group">
-              <label for="edit-room-tags-input">Tags</label>
+              <div class="section-label-row" style="margin-bottom: 0;">
+                <label for="edit-room-tags-input">Tags</label>
+                <button id="btn-tag-colors-room" type="button" class="icon-btn tag-palette-btn" aria-label="Tag Colors" data-tooltip="Tag Colors" title="Color this room's tags">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22a10 10 0 1 1 10-10c0 2.5-2 3.5-4 3.5h-2a2 2 0 0 0-1.5 3.3A1.9 1.9 0 0 1 12 22z"></path>
+                    <circle cx="7.5" cy="10.5" r="1.3" fill="currentColor"></circle>
+                    <circle cx="11" cy="6.5" r="1.3" fill="currentColor"></circle>
+                    <circle cx="16" cy="8" r="1.3" fill="currentColor"></circle>
+                  </svg>
+                </button>
+              </div>
               <div id="edit-room-tags-list" class="tag-chip-list editable-tags"></div>
               <div class="tag-input-row">
                 <input id="edit-room-tags-input" type="text" placeholder="Add tag (Enter)..." list="existing-tags-datalist" />
@@ -844,6 +864,50 @@
             <button id="btn-submit-fork-room" type="submit" class="btn btn-primary">⑂ Fork Room</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- MODAL 1C: Tag Colors -->
+    <div id="modal-tag-colors" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-tag-colors-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="modal-tag-colors-title">Tag Colors</h3>
+          <button id="btn-close-tag-colors" type="button" class="icon-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc">Pick a color, check one or more tags, then apply. Tag colors show everywhere the tag is used.</p>
+
+          <div class="form-group">
+            <div class="section-label-row" style="margin-bottom: 0;">
+              <label>Color</label>
+              <span id="tag-color-preview" class="tag-pill tag-colored">#0ea5e9</span>
+            </div>
+            <div id="tag-color-swatches" class="color-swatch-row"></div>
+            <div class="hex-color-input-row">
+              <input id="tag-color-picker" type="color" class="color-wheel-input" value="#0ea5e9" title="Pick custom color" />
+              <input id="tag-color-hex-input" type="text" class="hex-text-input" placeholder="#RRGGBB" maxlength="7" />
+              <button id="btn-tag-color-apply-hex" type="button" class="btn btn-secondary btn-xs">Use</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <div class="section-label-row" style="margin-bottom: 0;">
+              <label>Tags (<span id="tag-color-selected-count">0</span> selected)</label>
+              <div class="custody-bulk-btns">
+                <button id="btn-tag-color-select-all" type="button" class="btn btn-xs btn-ghost">Select All</button>
+                <button id="btn-tag-color-select-none" type="button" class="btn btn-xs btn-ghost">None</button>
+              </div>
+            </div>
+            <input id="tag-color-search" type="text" placeholder="Filter tags..." autocomplete="off" />
+            <div id="tag-color-list" class="tag-color-list"></div>
+          </div>
+
+          <div class="modal-footer">
+            <button id="btn-tag-color-clear" type="button" class="btn btn-ghost">Remove Color</button>
+            <button id="btn-tag-color-done" type="button" class="btn btn-secondary">Done</button>
+            <button id="btn-tag-color-apply" type="button" class="btn btn-primary">Apply to Selected</button>
+          </div>
+        </div>
       </div>
     </div>
 

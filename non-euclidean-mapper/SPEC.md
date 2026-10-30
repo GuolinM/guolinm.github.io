@@ -33,7 +33,10 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
 - `positions`: Map of `roomId -> { x, y }` stored persistently so existing rooms remain locked where placed/spawned.
 - `viewport`: `{ panX, panY, zoom }`
 - `snapToGrid`: Optional toggle for grid alignment
-- `tagColors`: Custom color mapping for tags
+- `tagColors`: Optional global map of `tag -> "#rrggbb"` (absent/empty in older saves). Persisted in all save formats in a backward-compatible way:
+  - **JSON / localStorage / Backups:** `mapDisplayConfig.tagColors` object (missing → `{}`).
+  - **YAML:** optional trailing `mapDisplayConfig.tagColors:` block written only when non-empty (older readers ignore it).
+  - **Share Link:** optional 7th tuple element of flat `[tagDictIdx, colorDictIdx, ...]` pairs, omitted when empty so links stay identical to the legacy 6-element format.
 
 ---
 
@@ -93,6 +96,7 @@ A lightweight, fast, and visually intuitive mapping tool for games with non-Eucl
 - Left sidebar search results display matching rooms and matching connections in dedicated sections, with quick-select and camera centering.
 - Responsive canvas dimming: non-matching rooms and connections are dimmed (opacity 0.12), while matching rooms and matching connections are highlighted. Direct connection matches glow emerald green (`#10b981`) with highlighted green arrowheads.
 - Multi-tag filtering: selecting tag pills filters the canvas so only rooms with active tags and connections between matching rooms remain illuminated; connections attached to non-matching rooms are dimmed.
+- **Tag Colors Dialog (`#modal-tag-colors`):** Opened from the palette button in the **Filter by Tag** header (pre-selects active tag filters) or in the **Edit Room → Tags** label (pre-selects that room's tags). Offers swatches (existing tag colors first, then presets and room colors), a native color wheel, and hex input. Tags are listed with checkboxes (with Select All / None and a filter box); **Apply to N Tags** colors all checked tags, each row's **Apply** button colors just that tag, and **Remove Color** clears color from checked tags. Colors apply globally (filter pills, room list, inspector, batch tags, fork dialog, tag suggestion chips, and map canvas tag badges) and are undoable.
 
 ### Priority 5: Autosave, Backups & File Portability
 - **Unified Save Schema (`SAVE_SCHEMA`):** Single canonical field-descriptor schema and intermediate state representation driving JSON export/import, YAML export/import, and Compact Share Link encoding/decoding so adding any future field updates all three formats automatically.

@@ -638,6 +638,97 @@ html, body {
   color: var(--text-secondary);
 }
 
+/* ==================== GLOBAL TAG COLORS ==================== */
+.tag-pill.tag-colored,
+.mini-tag.tag-colored,
+.chip-btn.tag-colored {
+  background: var(--tag-bg);
+  border: 1px solid var(--tag-border);
+  color: var(--tag-fg);
+}
+
+.tag-pill.tag-colored:hover,
+.chip-btn.tag-colored:hover {
+  background: var(--tag-bg-hover);
+}
+
+.tag-pill.tag-colored.active {
+  background: var(--tag-color);
+  border-color: var(--tag-color);
+  color: #fff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
+}
+
+.section-label-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag-palette-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.tag-palette-btn:hover {
+  color: #f0abfc;
+}
+
+.tag-color-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-top: 6px;
+}
+
+.tag-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.tag-color-row.checked {
+  border-color: var(--border-focus);
+  background: rgba(14, 165, 233, 0.08);
+}
+
+.tag-color-row input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.tag-color-row-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-color-row-meta code {
+  font-size: 10.5px;
+}
+
+.color-swatch.used-by-tag {
+  outline: 1px dashed rgba(255, 255, 255, 0.45);
+  outline-offset: 2px;
+}
+
 /* ==================== INTERACTIVE MAP CANVAS ==================== */
 .map-container {
   flex: 1;

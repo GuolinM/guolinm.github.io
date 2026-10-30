@@ -80,6 +80,99 @@
     return list;
   }
 
+  // ==================== GLOBAL TAG COLORS ====================
+  /**
+   * Tag colors are stored map-wide in `appState.mapDisplayConfig.tagColors` ({ [tag]: "#rrggbb" }).
+   * Older saves without this field simply have no colored tags.
+   */
+  function getTagColorsMap() {
+    if (!appState || !appState.mapDisplayConfig) return {};
+    if (!appState.mapDisplayConfig.tagColors || typeof appState.mapDisplayConfig.tagColors !== "object") {
+      appState.mapDisplayConfig.tagColors = {};
+    }
+    return appState.mapDisplayConfig.tagColors;
+  }
+
+  function getTagColor(tag) {
+    if (!tag || !appState || !appState.mapDisplayConfig) return null;
+    const map = appState.mapDisplayConfig.tagColors;
+    if (!map || !Object.prototype.hasOwnProperty.call(map, tag)) return null;
+    return normalizeHexColor(map[tag]);
+  }
+
+  function setTagColor(tag, color) {
+    const map = getTagColorsMap();
+    const norm = normalizeHexColor(color);
+    if (norm) map[tag] = norm;
+    else delete map[tag];
+  }
+
+  function hexToRgbParts(hex) {
+    const norm = normalizeHexColor(hex) || "#64748b";
+    const n = parseInt(norm.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function hexToRgba(hex, alpha) {
+    const [r, g, b] = hexToRgbParts(hex);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  function mixHexWithWhite(hex, amount) {
+    const [r, g, b] = hexToRgbParts(hex);
+    const mix = (v) => Math.round(v + (255 - v) * amount);
+    return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+  }
+
+  function getTagColorCssVars(color) {
+    return (
+      `--tag-color: ${color}; --tag-bg: ${hexToRgba(color, 0.2)}; ` +
+      `--tag-bg-hover: ${hexToRgba(color, 0.32)}; --tag-border: ${hexToRgba(color, 0.6)}; ` +
+      `--tag-fg: ${mixHexWithWhite(color, 0.45)};`
+    );
+  }
+
+  /** Applies the global tag color (if any) to an HTML tag chip element. */
+  function applyTagColorToEl(el, tag) {
+    const c = getTagColor(tag);
+    if (el && c) {
+      el.classList.add("tag-colored");
+      el.style.cssText += getTagColorCssVars(c);
+    }
+    return el;
+  }
+
+  /** Returns { cls, style } fragments for building tag chips via HTML template strings. */
+  function tagColorAttrs(tag) {
+    const c = getTagColor(tag);
+    return c ? { cls: " tag-colored", style: ` style="${getTagColorCssVars(c)}"` } : { cls: "", style: "" };
+  }
+
+  function getUsedTagColors() {
+    const seen = new Set();
+    for (const c of Object.values(getTagColorsMap())) {
+      const norm = normalizeHexColor(c);
+      if (norm) seen.add(norm);
+    }
+    return Array.from(seen);
+  }
+
+  function normalizeTagColorsMap(raw) {
+    const out = {};
+    if (!raw) return out;
+    const entries = Array.isArray(raw)
+      ? raw.filter((pair) => Array.isArray(pair) && pair.length >= 2)
+      : typeof raw === "object"
+      ? Object.entries(raw)
+      : [];
+    for (const [tag, color] of entries) {
+      const norm = normalizeHexColor(String(color ?? ""));
+      const tagStr = String(tag ?? "").trim();
+      if (tagStr && norm) out[tagStr] = norm;
+    }
+    return out;
+  }
+
   // ==================== APPLICATION STATE ====================
   let appState = createEmptyMapState();
   let undoStack = [];
@@ -150,6 +243,7 @@
       mapDisplayConfig: {
         positions: {}, // roomId -> { x, y }
         viewport: { panX: 480, panY: 320, zoom: 1 },
+        tagColors: {}, // tag -> "#rrggbb"
       },
     };
   }
@@ -1346,6 +1440,12 @@
           y: 60.5,
           class: "room-tag-badge-text",
         });
+        const tagColor = getTagColor(t);
+        if (tagColor) {
+          tagRect.style.fill = hexToRgba(tagColor, 0.24);
+          tagRect.style.stroke = hexToRgba(tagColor, 0.7);
+          tagTxt.style.fill = mixHexWithWhite(tagColor, 0.45);
+        }
         tagTxt.textContent = labelStr;
         g.appendChild(tagRect);
         g.appendChild(tagTxt);
@@ -1927,6 +2027,7 @@
           const pill = document.createElement("span");
           pill.className = "tag-pill" + (activeTagFilters.has(tag) ? " active" : "");
           pill.textContent = `${tag} (${count})`;
+          applyTagColorToEl(pill, tag);
           pill.addEventListener("click", () => {
             if (activeTagFilters.has(tag)) activeTagFilters.delete(tag);
             else activeTagFilters.add(tag);
@@ -1990,7 +2091,10 @@
         ${
           room.tags && room.tags.length > 0
             ? `<div class="room-item-tags">${room.tags
-                .map((t) => `<span class="mini-tag">#${escapeHtml(t)}</span>`)
+                .map((t) => {
+                  const tc = tagColorAttrs(t);
+                  return `<span class="mini-tag${tc.cls}"${tc.style}>#${escapeHtml(t)}</span>`;
+                })
                 .join("")}</div>`
             : ""
         }
@@ -2158,6 +2262,7 @@
               pill.innerHTML = `#${escapeHtml(item.tag)}${countSuffix} <span class="remove-tag" title="Remove #${escapeHtml(
                 item.tag
               )} from all selected rooms">&times;</span>`;
+              applyTagColorToEl(pill, item.tag);
               pill.querySelector(".remove-tag").addEventListener("click", (e) => {
                 e.stopPropagation();
                 pushUndoSnapshot();
@@ -2192,6 +2297,7 @@
             chip.disabled = selCount === 0;
             chip.textContent = `+ #${t}`;
             chip.title = `Add #${t} to all ${selCount} selected rooms`;
+            applyTagColorToEl(chip, t);
             chip.addEventListener("click", () => {
               if (multiSelectedRoomIds.size === 0) return;
               pushUndoSnapshot();
@@ -2296,6 +2402,7 @@
           const pill = document.createElement("span");
           pill.className = "tag-pill";
           pill.innerHTML = `#${escapeHtml(tag)} <span class="remove-tag" title="Remove tag">&times;</span>`;
+          applyTagColorToEl(pill, tag);
           pill.querySelector(".remove-tag").addEventListener("click", (e) => {
             e.stopPropagation();
             pushUndoSnapshot();
@@ -2663,6 +2770,7 @@
       chip.className = "chip-btn";
       chip.setAttribute("data-tag", t);
       chip.textContent = `+ #${t}`;
+      applyTagColorToEl(chip, t);
       chip.addEventListener("click", () => {
         const input = document.getElementById("new-room-tags");
         const rawSegments = input.value.split(",");
@@ -2828,9 +2936,10 @@
           row.className = "custody-row";
           const leftInactive = custody === "right" ? " inactive" : "";
           const rightInactive = custody === "left" ? " inactive" : "";
+          const tagTc = tagColorAttrs(tag);
           row.innerHTML = `
             <div class="custody-side-cell${leftInactive}">
-              <span class="tag-pill">#${escapeHtml(tag)}</span>
+              <span class="tag-pill${tagTc.cls}"${tagTc.style}>#${escapeHtml(tag)}</span>
             </div>
             <div class="custody-center-controls">
               <button type="button" class="custody-btn${custody === "left" ? " active" : ""}" data-val="left" title="Assign #${escapeHtml(tag)} only to Left Fork">← Left</button>
@@ -2838,7 +2947,7 @@
               <button type="button" class="custody-btn${custody === "right" ? " active" : ""}" data-val="right" title="Assign #${escapeHtml(tag)} only to Right Fork">Right →</button>
             </div>
             <div class="custody-side-cell right${rightInactive}">
-              <span class="tag-pill">#${escapeHtml(tag)}</span>
+              <span class="tag-pill${tagTc.cls}"${tagTc.style}>#${escapeHtml(tag)}</span>
             </div>
           `;
           row.querySelectorAll(".custody-btn").forEach((btn) => {
@@ -2963,6 +3072,216 @@
     const modal = document.getElementById("modal-fork-room");
     if (modal) modal.classList.add("hidden");
     forkModalState.parentRoomId = null;
+  }
+
+  // ==================== TAG COLORS MODAL ====================
+  const tagColorModalState = {
+    color: ROOM_COLORS[0],
+    selected: new Set(),
+    search: "",
+  };
+
+  function getAllTagCounts() {
+    const counts = new Map();
+    for (const r of appState.rooms) {
+      for (const t of r.tags || []) counts.set(t, (counts.get(t) || 0) + 1);
+    }
+    return counts;
+  }
+
+  function getTagColorSwatchOptions() {
+    const seen = new Set();
+    const list = [];
+    const add = (c) => {
+      const norm = normalizeHexColor(c);
+      if (norm && !seen.has(norm)) {
+        seen.add(norm);
+        list.push(norm);
+      }
+    };
+    getUsedTagColors().forEach(add); // existing tag colors first
+    ROOM_COLORS.forEach(add);
+    appState.rooms.forEach((r) => add(r.color));
+    add(tagColorModalState.color);
+    return list;
+  }
+
+  function openTagColorModal(preselectTags = []) {
+    const counts = getAllTagCounts();
+    if (counts.size === 0) {
+      showToast("No tags yet - add tags to rooms first");
+      return;
+    }
+    tagColorModalState.selected = new Set(preselectTags.filter((t) => counts.has(t)));
+    tagColorModalState.search = "";
+    const firstColored = Array.from(tagColorModalState.selected)
+      .map((t) => getTagColor(t))
+      .find(Boolean);
+    tagColorModalState.color = firstColored || getUsedTagColors()[0] || ROOM_COLORS[0];
+
+    const searchInput = document.getElementById("tag-color-search");
+    if (searchInput) searchInput.value = "";
+    document.getElementById("modal-tag-colors").classList.remove("hidden");
+    renderTagColorModal();
+  }
+
+  function closeTagColorModal() {
+    document.getElementById("modal-tag-colors").classList.add("hidden");
+  }
+
+  function renderTagColorModal() {
+    const modal = document.getElementById("modal-tag-colors");
+    if (!modal || modal.classList.contains("hidden")) return;
+    const color = tagColorModalState.color;
+
+    // Color picker area
+    const swatchWrap = document.getElementById("tag-color-swatches");
+    swatchWrap.innerHTML = "";
+    const usedColors = new Set(getUsedTagColors());
+    for (const c of getTagColorSwatchOptions()) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "color-swatch" + (c === color ? " active" : "") + (usedColors.has(c) ? " used-by-tag" : "");
+      btn.style.background = c;
+      btn.title = usedColors.has(c) ? `${c} (used by a tag)` : c;
+      btn.addEventListener("click", () => {
+        tagColorModalState.color = c;
+        renderTagColorModal();
+      });
+      swatchWrap.appendChild(btn);
+    }
+    const picker = document.getElementById("tag-color-picker");
+    if (picker && document.activeElement !== picker) picker.value = color;
+    const hexInput = document.getElementById("tag-color-hex-input");
+    if (hexInput && document.activeElement !== hexInput) hexInput.value = color;
+
+    const preview = document.getElementById("tag-color-preview");
+    if (preview) {
+      preview.style.cssText = getTagColorCssVars(color);
+      preview.textContent = color;
+    }
+
+    // Tag list
+    const counts = getAllTagCounts();
+    for (const t of Array.from(tagColorModalState.selected)) {
+      if (!counts.has(t)) tagColorModalState.selected.delete(t);
+    }
+    const q = tagColorModalState.search.trim().toLowerCase();
+    const listEl = document.getElementById("tag-color-list");
+    listEl.innerHTML = "";
+    const sortedTags = Array.from(counts.keys()).sort((a, b) => a.localeCompare(b));
+    const visibleTags = sortedTags.filter((t) => !q || t.toLowerCase().includes(q));
+    if (visibleTags.length === 0) {
+      listEl.innerHTML = `<div class="muted-hint" style="padding: 8px;">No tags match.</div>`;
+    }
+    for (const tag of visibleTags) {
+      const isChecked = tagColorModalState.selected.has(tag);
+      const current = getTagColor(tag);
+      const row = document.createElement("label");
+      row.className = "tag-color-row" + (isChecked ? " checked" : "");
+      const tc = tagColorAttrs(tag);
+      row.innerHTML = `
+        <input type="checkbox" ${isChecked ? "checked" : ""} />
+        <span class="tag-pill${tc.cls}"${tc.style}>#${escapeHtml(tag)}</span>
+        <span class="tag-color-row-meta">${counts.get(tag)} room${counts.get(tag) === 1 ? "" : "s"}${
+          current ? ` &middot; <code>${current}</code>` : " &middot; no color"
+        }</span>
+        <button type="button" class="btn btn-xs btn-ghost tag-color-row-apply" title="Apply current color to #${escapeHtml(
+          tag
+        )} only">Apply</button>
+      `;
+      row.querySelector("input").addEventListener("change", (e) => {
+        if (e.target.checked) tagColorModalState.selected.add(tag);
+        else tagColorModalState.selected.delete(tag);
+        renderTagColorModal();
+      });
+      row.querySelector(".tag-color-row-apply").addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        applyColorToTags([tag], tagColorModalState.color);
+      });
+      listEl.appendChild(row);
+    }
+
+    const selCount = tagColorModalState.selected.size;
+    document.getElementById("tag-color-selected-count").textContent = String(selCount);
+    const applyBtn = document.getElementById("btn-tag-color-apply");
+    applyBtn.disabled = selCount === 0;
+    applyBtn.textContent = selCount > 0 ? `Apply to ${selCount} Tag${selCount === 1 ? "" : "s"}` : "Apply to Selected";
+    const clearBtn = document.getElementById("btn-tag-color-clear");
+    clearBtn.disabled = !Array.from(tagColorModalState.selected).some((t) => getTagColor(t));
+  }
+
+  function applyColorToTags(tags, color) {
+    if (!tags || tags.length === 0) return;
+    pushUndoSnapshot();
+    for (const t of tags) setTagColor(t, color);
+    saveStateToLocal();
+    renderAll();
+    renderTagColorModal();
+    const label = tags.length === 1 ? `#${tags[0]}` : `${tags.length} tags`;
+    showToast(color ? `Colored ${label} ${color}` : `Removed color from ${label}`);
+  }
+
+  function bindTagColorModalEvents() {
+    const filterBtn = document.getElementById("btn-tag-colors-filter");
+    if (filterBtn) {
+      filterBtn.addEventListener("click", () => openTagColorModal(Array.from(activeTagFilters)));
+    }
+    const roomBtn = document.getElementById("btn-tag-colors-room");
+    if (roomBtn) {
+      roomBtn.addEventListener("click", () => {
+        const room = getRoomById(selectedRoomId);
+        openTagColorModal(room ? room.tags || [] : []);
+      });
+    }
+    document.getElementById("btn-close-tag-colors").addEventListener("click", closeTagColorModal);
+    document.getElementById("btn-tag-color-done").addEventListener("click", closeTagColorModal);
+
+    const applyHex = () => {
+      const norm = normalizeHexColor(document.getElementById("tag-color-hex-input").value);
+      if (!norm) {
+        showToast("Enter a valid hex color like #38bdf8");
+        return;
+      }
+      tagColorModalState.color = norm;
+      renderTagColorModal();
+    };
+    document.getElementById("btn-tag-color-apply-hex").addEventListener("click", applyHex);
+    document.getElementById("tag-color-hex-input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        applyHex();
+      }
+    });
+    document.getElementById("tag-color-picker").addEventListener("input", (e) => {
+      const norm = normalizeHexColor(e.target.value);
+      if (norm) {
+        tagColorModalState.color = norm;
+        renderTagColorModal();
+      }
+    });
+    document.getElementById("tag-color-search").addEventListener("input", (e) => {
+      tagColorModalState.search = e.target.value;
+      renderTagColorModal();
+    });
+    document.getElementById("btn-tag-color-select-all").addEventListener("click", () => {
+      const q = tagColorModalState.search.trim().toLowerCase();
+      for (const t of getAllTagCounts().keys()) {
+        if (!q || t.toLowerCase().includes(q)) tagColorModalState.selected.add(t);
+      }
+      renderTagColorModal();
+    });
+    document.getElementById("btn-tag-color-select-none").addEventListener("click", () => {
+      tagColorModalState.selected.clear();
+      renderTagColorModal();
+    });
+    document.getElementById("btn-tag-color-apply").addEventListener("click", () => {
+      applyColorToTags(Array.from(tagColorModalState.selected), tagColorModalState.color);
+    });
+    document.getElementById("btn-tag-color-clear").addEventListener("click", () => {
+      applyColorToTags(Array.from(tagColorModalState.selected), null);
+    });
   }
 
   // ==================== ADD CONNECTION MODAL + NESTED VISUAL MAP (Priority 3) ====================
@@ -3098,7 +3417,10 @@
           ${
             room.tags && room.tags.length
               ? `<div class="room-item-tags">${room.tags
-                  .map((t) => `<span class="mini-tag">#${escapeHtml(t)}</span>`)
+                  .map((t) => {
+                    const tc = tagColorAttrs(t);
+                    return `<span class="mini-tag${tc.cls}"${tc.style}>#${escapeHtml(t)}</span>`;
+                  })
                   .join("")}</div>`
               : ""
           }
@@ -3237,6 +3559,9 @@
         clean.mapDisplayConfig.positions[r.id] = free;
       }
     }
+
+    // Optional global tag colors (absent in older saves -> empty map)
+    clean.mapDisplayConfig.tagColors = normalizeTagColorsMap(data.mapDisplayConfig?.tagColors);
     return clean;
   }
 
@@ -3302,6 +3627,15 @@
     } else {
       for (const [roomId, pos] of posEntries) {
         lines.push(`    ${q(roomId)}: { x: ${Math.round(pos.x)}, y: ${Math.round(pos.y)} }`);
+      }
+    }
+
+    // Optional section (written last & only when non-empty so older readers simply ignore it)
+    const tagColorEntries = Object.entries(canonical.mapDisplayConfig.tagColors || {});
+    if (tagColorEntries.length > 0) {
+      lines.push(`  tagColors:`);
+      for (const [tag, color] of tagColorEntries) {
+        lines.push(`    ${q(tag)}: ${q(color)}`);
       }
     }
 
@@ -3384,8 +3718,27 @@
           subSection = "viewport";
         } else if (trimmedLine.startsWith("positions:")) {
           subSection = "positions";
+        } else if (trimmedLine.startsWith("tagColors:")) {
+          subSection = "tagColors";
         } else if (subSection === "viewport") {
           assignYamlKeyValBySchema(result.mapDisplayConfig.viewport, trimmedLine, vpFieldMap, unquote);
+        } else if (subSection === "tagColors") {
+          if (trimmedLine === "{}") continue;
+          const quotedMatch = trimmedLine.match(/^("(?:[^"\\]|\\.)*")\s*:\s*(.+)$/);
+          let tagKey = null;
+          let colorVal = null;
+          if (quotedMatch) {
+            tagKey = unquote(quotedMatch[1]);
+            colorVal = unquote(quotedMatch[2]);
+          } else if (trimmedLine.includes(":")) {
+            const sep = trimmedLine.indexOf(":");
+            tagKey = unquote(trimmedLine.slice(0, sep));
+            colorVal = unquote(trimmedLine.slice(sep + 1));
+          }
+          if (tagKey) {
+            result.mapDisplayConfig.tagColors = result.mapDisplayConfig.tagColors || {};
+            result.mapDisplayConfig.tagColors[tagKey] = colorVal;
+          }
         } else if (subSection === "positions") {
           if (trimmedLine === "{}") continue;
           const match = trimmedLine.match(
@@ -3501,14 +3854,26 @@
     const vp = canonical.mapDisplayConfig.viewport;
     const vpTuple = SAVE_SCHEMA.viewport.map((f) => vp[f.key]);
 
-    return [1, canonical.title, vpTuple, dict, roomTuples, connTuples];
+    const packed = [1, canonical.title, vpTuple, dict, roomTuples, connTuples];
+
+    // Optional 7th element: flat [tagDictIdx, colorDictIdx, ...] pairs.
+    // Omitted entirely when there are no tag colors, so links stay identical to the legacy 6-element format.
+    const tagColorEntries = Object.entries(canonical.mapDisplayConfig.tagColors || {});
+    if (tagColorEntries.length > 0) {
+      const flat = [];
+      for (const [tag, color] of tagColorEntries) {
+        flat.push(intern(tag), intern(color));
+      }
+      packed.push(flat);
+    }
+    return packed;
   }
 
   function unpackStateFromCompactTuple(tuple) {
     if (!Array.isArray(tuple) || tuple.length < 6) {
       throw new Error("Invalid compact save payload.");
     }
-    const [version, title, vpTuple, dict, roomTuples, connTuples] = tuple;
+    const [version, title, vpTuple, dict, roomTuples, connTuples, tagColorFlat] = tuple;
     const lookupDict = (idx) => (typeof idx === "number" && idx >= 0 && idx < dict.length ? dict[idx] : "");
 
     const compactRoomFields = SAVE_SCHEMA.room.filter((f) => !f.compactSkip);
@@ -3551,13 +3916,22 @@
       viewport[field.key] = vpTuple?.[idx] ?? field.default();
     });
 
+    const tagColors = {};
+    if (Array.isArray(tagColorFlat)) {
+      for (let i = 0; i + 1 < tagColorFlat.length; i += 2) {
+        const tag = lookupDict(tagColorFlat[i]);
+        const color = lookupDict(tagColorFlat[i + 1]);
+        if (tag && color) tagColors[tag] = color;
+      }
+    }
+
     return validateAndNormalizeState({
       version: Number(version) || 1,
       title: String(title || "Shared Map"),
       updatedAt: new Date().toISOString(),
       rooms,
       connections,
-      mapDisplayConfig: { viewport, positions },
+      mapDisplayConfig: { viewport, positions, tagColors },
     });
   }
 
@@ -4976,6 +5350,7 @@
       if (e.key === "Escape") {
         closeAddRoomModal();
         closeForkRoomModal();
+        closeTagColorModal();
         closeAddConnectionModal();
         closeMobileSearchDialog();
         document.getElementById("modal-backups").classList.add("hidden");
@@ -5041,6 +5416,7 @@
     }
 
     bindEvents();
+    bindTagColorModalEvents();
 
     // Check if URL has a ?save=... parameter to auto-load
     const urlParams = new URLSearchParams(window.location.search);
