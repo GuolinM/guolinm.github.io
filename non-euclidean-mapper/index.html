@@ -75,6 +75,15 @@
           <span id="multi-select-btn-label" class="btn-label">Multi-Select</span> <kbd>M</kbd>
         </button>
 
+        <button id="btn-find-path" class="btn btn-ghost" aria-label="Find Path" data-tooltip="Find Shortest Path (P)" title="Find shortest paths between two rooms (Shortcut: P)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6" cy="19" r="3"></circle>
+            <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path>
+            <circle cx="18" cy="5" r="3"></circle>
+          </svg>
+          <span class="btn-label">Find Path</span> <kbd>P</kbd>
+        </button>
+
         <button id="btn-landscape-mode" class="btn btn-ghost desktop-only" aria-label="Landscape Mode" data-tooltip="Landscape Mode (Top/Bottom Panels)" title="Toggle Landscape Mode (Move Left &amp; Right sidebars to Top &amp; Bottom)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="18" height="18" rx="2"></rect>
@@ -245,6 +254,9 @@
             <marker id="arrow-search-match" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
               <path d="M 1 2 L 10 6 L 1 10 z" fill="#10b981" />
             </marker>
+            <marker id="arrow-path-highlight" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="8.5" markerHeight="8.5" orient="auto-start-reverse">
+              <path d="M 1 2 L 10 6 L 1 10 z" fill="#facc15" />
+            </marker>
 
             <!-- Rainbow gradient for room accent bars -->
             <linearGradient id="rainbow-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -285,6 +297,14 @@
           <span>Rooms &amp; Search</span>
           <span id="expand-room-count-badge" class="badge">0</span>
         </button>
+
+        <!-- Floating Active Path Banner on Map Canvas -->
+        <div id="active-path-banner" class="active-path-banner hidden" role="status" aria-live="polite">
+          <span class="active-path-dot"></span>
+          <span id="active-path-banner-text" class="active-path-banner-text">Path highlighted</span>
+          <button id="btn-change-active-path" type="button" class="btn btn-xs btn-secondary">Options</button>
+          <button id="btn-clear-active-path" type="button" class="btn btn-xs btn-ghost" title="Clear highlighted path">&times; Clear</button>
+        </div>
 
         <!-- Empty State Overlay -->
         <div id="map-empty-state" class="map-empty-state hidden">
@@ -1085,11 +1105,63 @@
       </div>
     </div>
 
+    <!-- MODAL 4: Find Shortest Paths Between Two Rooms -->
+    <div id="modal-find-path" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-find-path-title">
+      <div class="modal-card modal-wide">
+        <div class="modal-header">
+          <h3 id="modal-find-path-title">Find Shortest Paths Between Rooms</h3>
+          <button id="btn-close-find-path" type="button" class="icon-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc">
+            Select a <strong>Start Room</strong> and <strong>Destination Room</strong> to discover up to 3 shortest routes. Click any route option to keep it highlighted on the map.
+          </p>
+
+          <div class="path-endpoints-row">
+            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+              <label for="path-from-select">Start Room (Origin)</label>
+              <select id="path-from-select" class="select-input"></select>
+            </div>
+            <button id="btn-swap-path-rooms" type="button" class="btn btn-secondary btn-sm path-swap-btn" title="Swap Start &amp; Destination Rooms">⇅ Swap</button>
+            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+              <label for="path-to-select">Destination Room (Target)</label>
+              <select id="path-to-select" class="select-input"></select>
+            </div>
+          </div>
+
+          <div class="checkbox-row" style="margin-top: 2px;">
+            <label class="checkbox-label">
+              <input id="path-include-warps" type="checkbox" checked />
+              Allow Warp connections
+            </label>
+            <label class="checkbox-label">
+              <input id="path-ignore-direction" type="checkbox" />
+              Ignore one-way restrictions
+            </label>
+          </div>
+
+          <div class="form-group" style="margin-top: 4px;">
+            <div class="section-label-row" style="margin-bottom: 4px;">
+              <span class="section-label">Route Options (Up to 3 Shortest Paths)</span>
+              <span id="path-results-summary" class="muted-hint"></span>
+            </div>
+            <div id="path-options-list" class="path-options-list"></div>
+          </div>
+
+          <div class="modal-footer">
+            <button id="btn-clear-path-modal" type="button" class="btn btn-ghost">Clear Highlight</button>
+            <button id="btn-done-find-path" type="button" class="btn btn-primary">Keep Highlighted &amp; Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast Notification Container -->
     <div id="toast-container" class="toast-container"></div>
   </div>
 
   <script src="batch-actions.js"></script>
+  <script src="path-finder.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

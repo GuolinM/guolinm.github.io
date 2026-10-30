@@ -1176,12 +1176,19 @@
     }
 
     // 1. Render Connections (Warps always rendered below everything else)
+    const pf = window.mapPathFinder || null;
+    if (!isNestedPicker && pf) {
+      pf.validateAgainstState(appState.rooms, appState.connections);
+    }
+    const hasActivePathHighlight = !isNestedPicker && Boolean(pf && pf.hasActivePath());
+
     const isRoomHighlightedForConn = (rId) =>
       Boolean(rId) && (selectedRoomId === rId || multiSelectedRoomIds.has(rId));
 
     const sortedConnections = [...appState.connections].sort((a, b) => {
       const getLayerRank = (c) => {
-        if (!isNestedPicker && selectedConnectionId === c.id) return 3;
+        if (!isNestedPicker && selectedConnectionId === c.id) return 4;
+        if (hasActivePathHighlight && pf.isConnectionOnActivePath(c.id)) return 3;
         if (c.style !== "warp") return 2;
         if (
           !isNestedPicker &&
@@ -1225,6 +1232,7 @@
         matchesFilter = doesConnectionMatchSearchAndFilter(conn, connModalState.searchFilter, null);
       }
       const isDirectMatch = isFilteringMain && isConnectionDirectMatch(conn, searchQuery);
+      const isOnActivePath = hasActivePathHighlight && pf.isConnectionOnActivePath(conn.id);
 
       const classes = ["conn-group"];
       if (!conn.bidirectional) classes.push("oneway");
@@ -1234,7 +1242,13 @@
       }
       if (isAttachedToSelectedRoom) classes.push("connected-to-selected");
       if (isSelected) classes.push("selected");
-      if ((isFilteringMain || isFilteringNested) && !matchesFilter) classes.push("dimmed");
+      if (isOnActivePath) classes.push("path-highlight");
+      if (
+        ((isFilteringMain || isFilteringNested) && !matchesFilter) ||
+        (hasActivePathHighlight && !isOnActivePath && !isSelected)
+      ) {
+        classes.push("dimmed");
+      }
       if (isDirectMatch) classes.push("search-match");
 
       const g = createSvgEl("g", { class: classes.join(" "), "data-conn-id": conn.id });
@@ -1253,6 +1267,9 @@
       if (isSelected) {
         markerEnd = "url(#arrow-selected)";
         if (conn.bidirectional) markerStart = "url(#arrow-selected)";
+      } else if (isOnActivePath) {
+        markerEnd = "url(#arrow-path-highlight)";
+        if (conn.bidirectional) markerStart = "url(#arrow-path-highlight)";
       } else if (isDirectMatch) {
         markerEnd = "url(#arrow-search-match)";
         if (conn.bidirectional) markerStart = "url(#arrow-search-match)";
@@ -1344,10 +1361,19 @@
         matchesFilter = doesRoomMatchSearchAndFilter(room, connModalState.searchFilter, null);
       }
 
+      const isRoomOnPath = hasActivePathHighlight && pf.isRoomOnActivePath(room.id);
+      const pathStepIdx = isRoomOnPath ? pf.getRoomStepIndex(room.id) : -1;
+
       const nodeClasses = ["room-node"];
       if (isSelected || isNestedFrom || isNestedTo) nodeClasses.push("selected");
       if (isMultiSelected) nodeClasses.push("multi-selected");
-      if ((isFilteringMain || isFilteringNested) && !matchesFilter) nodeClasses.push("dimmed");
+      if (isRoomOnPath) nodeClasses.push("path-highlight");
+      if (
+        ((isFilteringMain || isFilteringNested) && !matchesFilter) ||
+        (hasActivePathHighlight && !isRoomOnPath && !isSelected)
+      ) {
+        nodeClasses.push("dimmed");
+      }
       if ((isFilteringMain || isFilteringNested) && matchesFilter) nodeClasses.push("search-match");
 
       const g = createSvgEl("g", {
@@ -1389,6 +1415,26 @@
       g.appendChild(cardBg);
       g.appendChild(accentBar);
       g.appendChild(titleText);
+
+      // Step badge on rooms along an active shortest path (1, 2, 3...)
+      if (isRoomOnPath && pathStepIdx >= 0) {
+        const stepBadgeGroup = createSvgEl("g", { class: "path-step-badge" });
+        const stepCircle = createSvgEl("circle", {
+          cx: NODE_W - 14,
+          cy: 16,
+          r: 9,
+          class: "path-step-badge-bg",
+        });
+        const stepNum = createSvgEl("text", {
+          x: NODE_W - 14,
+          y: 16.5,
+          class: "path-step-badge-text",
+        });
+        stepNum.textContent = String(pathStepIdx + 1);
+        stepBadgeGroup.appendChild(stepCircle);
+        stepBadgeGroup.appendChild(stepNum);
+        g.appendChild(stepBadgeGroup);
+      }
 
       // Subtitle / Description snippet or Nested slot badge
       if (isNestedFrom || isNestedTo) {
@@ -1970,6 +2016,8 @@
     if (emptyOverlay) {
       emptyOverlay.classList.toggle("hidden", appState.rooms.length > 0);
     }
+
+    renderActivePathBanner();
   }
 
   function renderLeftSidebar() {
@@ -3282,6 +3330,325 @@
     document.getElementById("btn-tag-color-clear").addEventListener("click", () => {
       applyColorToTags(Array.from(tagColorModalState.selected), null);
     });
+  }
+
+  // ==================== FIND SHORTEST PATHS MODAL ====================
+  const findPathModalState = {
+    fromRoomId: null,
+    toRoomId: null,
+    includeWarps: true,
+    ignoreDirection: false,
+    computedPaths: [],
+    selectedOptionIndex: 0,
+  };
+
+  function renderActivePathBanner() {
+    const banner = document.getElementById("active-path-banner");
+    const bannerText = document.getElementById("active-path-banner-text");
+    const btnFindPath = document.getElementById("btn-find-path");
+    const pf = window.mapPathFinder;
+    const hasPath = Boolean(pf && pf.hasActivePath());
+
+    if (btnFindPath) {
+      btnFindPath.classList.toggle("active", hasPath);
+    }
+    if (!banner || !bannerText) return;
+
+    if (!hasPath) {
+      banner.classList.add("hidden");
+      return;
+    }
+
+    const active = pf.activePath;
+    const fromRoom = getRoomById(active.fromRoomId);
+    const toRoom = getRoomById(active.toRoomId);
+    const stepCount = active.steps ? active.steps.length : 0;
+    const optNum = (active.optionIndex ?? 0) + 1;
+    bannerText.innerHTML = `Route #${optNum}: <strong>${escapeHtml(
+      fromRoom ? fromRoom.name : "Start"
+    )}</strong> &rarr; <strong>${escapeHtml(
+      toRoom ? toRoom.name : "End"
+    )}</strong> (${stepCount} step${stepCount === 1 ? "" : "s"})`;
+    banner.classList.remove("hidden");
+  }
+
+  function openFindPathModal() {
+    if (appState.rooms.length < 2) {
+      showToast("Add at least two rooms to find paths between them!");
+      return;
+    }
+
+    const pf = window.mapPathFinder;
+    const multiArr = Array.from(multiSelectedRoomIds);
+
+    if (pf && pf.hasActivePath()) {
+      findPathModalState.fromRoomId = pf.activePath.fromRoomId;
+      findPathModalState.toRoomId = pf.activePath.toRoomId;
+      findPathModalState.selectedOptionIndex = pf.activePath.optionIndex || 0;
+    } else if (multiArr.length >= 2) {
+      findPathModalState.fromRoomId = multiArr[0];
+      findPathModalState.toRoomId = multiArr[1];
+      findPathModalState.selectedOptionIndex = 0;
+    } else if (selectedRoomId) {
+      findPathModalState.fromRoomId = selectedRoomId;
+      const otherRoom = appState.rooms.find((r) => r.id !== selectedRoomId) || appState.rooms[0];
+      findPathModalState.toRoomId = otherRoom ? otherRoom.id : selectedRoomId;
+      findPathModalState.selectedOptionIndex = 0;
+    } else {
+      if (!findPathModalState.fromRoomId || !getRoomById(findPathModalState.fromRoomId)) {
+        findPathModalState.fromRoomId = appState.rooms[0].id;
+      }
+      if (
+        !findPathModalState.toRoomId ||
+        !getRoomById(findPathModalState.toRoomId) ||
+        findPathModalState.toRoomId === findPathModalState.fromRoomId
+      ) {
+        const lastRoom = appState.rooms[appState.rooms.length - 1];
+        findPathModalState.toRoomId = lastRoom ? lastRoom.id : appState.rooms[0].id;
+      }
+      findPathModalState.selectedOptionIndex = 0;
+    }
+
+    populateFindPathRoomSelects();
+    recomputeAndRenderPathOptions(true);
+
+    const modal = document.getElementById("modal-find-path");
+    if (modal) modal.classList.remove("hidden");
+  }
+
+  function closeFindPathModal() {
+    const modal = document.getElementById("modal-find-path");
+    if (modal) modal.classList.add("hidden");
+  }
+
+  function populateFindPathRoomSelects() {
+    const fromSelect = document.getElementById("path-from-select");
+    const toSelect = document.getElementById("path-to-select");
+    if (!fromSelect || !toSelect) return;
+
+    const sortedRooms = [...appState.rooms].sort((a, b) => a.name.localeCompare(b.name));
+    const optionsHtml = sortedRooms
+      .map((r) => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}</option>`)
+      .join("");
+
+    fromSelect.innerHTML = optionsHtml;
+    toSelect.innerHTML = optionsHtml;
+
+    if (findPathModalState.fromRoomId) fromSelect.value = findPathModalState.fromRoomId;
+    if (findPathModalState.toRoomId) toSelect.value = findPathModalState.toRoomId;
+
+    const includeWarpsEl = document.getElementById("path-include-warps");
+    if (includeWarpsEl) includeWarpsEl.checked = findPathModalState.includeWarps;
+    const ignoreDirEl = document.getElementById("path-ignore-direction");
+    if (ignoreDirEl) ignoreDirEl.checked = findPathModalState.ignoreDirection;
+  }
+
+  function recomputeAndRenderPathOptions(preserveSelectedIndex = false) {
+    const pf = window.mapPathFinder;
+    if (!pf) return;
+
+    const paths = pf.findShortestPaths(
+      appState.rooms,
+      appState.connections,
+      findPathModalState.fromRoomId,
+      findPathModalState.toRoomId,
+      {
+        maxPaths: 3,
+        includeWarps: findPathModalState.includeWarps,
+        ignoreDirection: findPathModalState.ignoreDirection,
+      }
+    );
+
+    findPathModalState.computedPaths = paths;
+    if (!preserveSelectedIndex || findPathModalState.selectedOptionIndex >= paths.length) {
+      findPathModalState.selectedOptionIndex = 0;
+    }
+
+    if (paths.length > 0) {
+      const chosen = paths[findPathModalState.selectedOptionIndex] || paths[0];
+      pf.setHighlightedPath(chosen, {
+        fromRoomId: findPathModalState.fromRoomId,
+        toRoomId: findPathModalState.toRoomId,
+        optionIndex: findPathModalState.selectedOptionIndex,
+      });
+    } else {
+      pf.clearHighlightedPath();
+    }
+
+    renderFindPathOptionsList();
+    renderMainMap();
+  }
+
+  function renderFindPathOptionsList() {
+    const listEl = document.getElementById("path-options-list");
+    const summaryEl = document.getElementById("path-results-summary");
+    if (!listEl) return;
+
+    const paths = findPathModalState.computedPaths || [];
+    if (summaryEl) {
+      summaryEl.textContent =
+        paths.length === 0
+          ? "No route found"
+          : `${paths.length} option${paths.length === 1 ? "" : "s"} found`;
+    }
+
+    listEl.innerHTML = "";
+
+    if (findPathModalState.fromRoomId === findPathModalState.toRoomId) {
+      listEl.innerHTML = `<div class="muted-hint" style="padding: 12px;">Start and Destination are the same room. Pick two different rooms to compare routes.</div>`;
+      return;
+    }
+
+    if (paths.length === 0) {
+      listEl.innerHTML = `<div class="muted-hint" style="padding: 12px;">No reachable path found between these rooms with the current settings.</div>`;
+      return;
+    }
+
+    paths.forEach((pathObj, idx) => {
+      const isSelected = idx === findPathModalState.selectedOptionIndex;
+      const card = document.createElement("div");
+      card.className = "path-option-card" + (isSelected ? " active" : "");
+
+      const stepCount = pathObj.steps.length;
+      const warpCount = pathObj.warpCount || 0;
+      const metaBadges = [
+        `<span class="badge">${stepCount} step${stepCount === 1 ? "" : "s"}</span>`,
+      ];
+      if (warpCount > 0) {
+        metaBadges.push(
+          `<span class="badge" style="color: #c084fc; border-color: rgba(192, 132, 252, 0.4);">${warpCount} warp${
+            warpCount === 1 ? "" : "s"
+          }</span>`
+        );
+      }
+
+      // Build step-by-step breadcrumb chain
+      const chainParts = [];
+      pathObj.orderedRoomIds.forEach((rId, rIdx) => {
+        const room = getRoomById(rId);
+        const roomName = room ? room.name : rId;
+        chainParts.push(
+          `<span class="path-room-chip">${renderRoomColorDot(
+            room ? room.color : null
+          )}<span>${escapeHtml(roomName)}</span></span>`
+        );
+        if (rIdx < pathObj.steps.length) {
+          const step = pathObj.steps[rIdx];
+          const stepLabel = step.label || (step.style === "warp" ? "Warp" : "");
+          const isWarpStep = step.style === "warp";
+          chainParts.push(
+            `<span class="path-step-arrow${isWarpStep ? " warp" : ""}" title="${
+              isWarpStep ? "Warp connection" : "Passage"
+            }">${
+              stepLabel ? `<small>${escapeHtml(stepLabel)}</small>` : ""
+            }&rarr;</span>`
+          );
+        }
+      });
+
+      card.innerHTML = `
+        <div class="path-option-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="path-option-radio">${isSelected ? "●" : "○"}</span>
+            <strong class="path-option-title">Option ${idx + 1}${idx === 0 ? " (Shortest)" : ""}</strong>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            ${metaBadges.join("")}
+            <span class="path-highlight-status">${isSelected ? "Highlighted on Map" : "Click to Highlight"}</span>
+          </div>
+        </div>
+        <div class="path-chain-row">${chainParts.join("")}</div>
+      `;
+
+      card.addEventListener("click", () => {
+        findPathModalState.selectedOptionIndex = idx;
+        const pf = window.mapPathFinder;
+        if (pf) {
+          pf.setHighlightedPath(pathObj, {
+            fromRoomId: findPathModalState.fromRoomId,
+            toRoomId: findPathModalState.toRoomId,
+            optionIndex: idx,
+          });
+        }
+        renderFindPathOptionsList();
+        renderMainMap();
+      });
+
+      listEl.appendChild(card);
+    });
+  }
+
+  function bindFindPathModalEvents() {
+    const btnFindPath = document.getElementById("btn-find-path");
+    if (btnFindPath) {
+      btnFindPath.addEventListener("click", openFindPathModal);
+    }
+    const btnClose = document.getElementById("btn-close-find-path");
+    if (btnClose) btnClose.addEventListener("click", closeFindPathModal);
+    const btnDone = document.getElementById("btn-done-find-path");
+    if (btnDone) btnDone.addEventListener("click", closeFindPathModal);
+
+    const fromSelect = document.getElementById("path-from-select");
+    if (fromSelect) {
+      fromSelect.addEventListener("change", (e) => {
+        findPathModalState.fromRoomId = e.target.value;
+        recomputeAndRenderPathOptions(false);
+      });
+    }
+    const toSelect = document.getElementById("path-to-select");
+    if (toSelect) {
+      toSelect.addEventListener("change", (e) => {
+        findPathModalState.toRoomId = e.target.value;
+        recomputeAndRenderPathOptions(false);
+      });
+    }
+    const swapBtn = document.getElementById("btn-swap-path-rooms");
+    if (swapBtn) {
+      swapBtn.addEventListener("click", () => {
+        const tmp = findPathModalState.fromRoomId;
+        findPathModalState.fromRoomId = findPathModalState.toRoomId;
+        findPathModalState.toRoomId = tmp;
+        populateFindPathRoomSelects();
+        recomputeAndRenderPathOptions(false);
+      });
+    }
+    const includeWarpsEl = document.getElementById("path-include-warps");
+    if (includeWarpsEl) {
+      includeWarpsEl.addEventListener("change", (e) => {
+        findPathModalState.includeWarps = e.target.checked;
+        recomputeAndRenderPathOptions(false);
+      });
+    }
+    const ignoreDirEl = document.getElementById("path-ignore-direction");
+    if (ignoreDirEl) {
+      ignoreDirEl.addEventListener("change", (e) => {
+        findPathModalState.ignoreDirection = e.target.checked;
+        recomputeAndRenderPathOptions(false);
+      });
+    }
+
+    const clearModalBtn = document.getElementById("btn-clear-path-modal");
+    if (clearModalBtn) {
+      clearModalBtn.addEventListener("click", () => {
+        if (window.mapPathFinder) window.mapPathFinder.clearHighlightedPath();
+        renderMainMap();
+        closeFindPathModal();
+        showToast("Cleared highlighted path");
+      });
+    }
+
+    const changeBannerBtn = document.getElementById("btn-change-active-path");
+    if (changeBannerBtn) {
+      changeBannerBtn.addEventListener("click", openFindPathModal);
+    }
+    const clearBannerBtn = document.getElementById("btn-clear-active-path");
+    if (clearBannerBtn) {
+      clearBannerBtn.addEventListener("click", () => {
+        if (window.mapPathFinder) window.mapPathFinder.clearHighlightedPath();
+        renderMainMap();
+        showToast("Cleared highlighted path");
+      });
+    }
   }
 
   // ==================== ADD CONNECTION MODAL + NESTED VISUAL MAP (Priority 3) ====================
@@ -5351,6 +5718,7 @@
         closeAddRoomModal();
         closeForkRoomModal();
         closeTagColorModal();
+        closeFindPathModal();
         closeAddConnectionModal();
         closeMobileSearchDialog();
         document.getElementById("modal-backups").classList.add("hidden");
@@ -5377,6 +5745,9 @@
       } else if (e.key.toLowerCase() === "m") {
         e.preventDefault();
         toggleMultiSelectMode();
+      } else if (e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        openFindPathModal();
       } else if (e.key === "/" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f")) {
         e.preventDefault();
         if (isMobileLayout()) {
@@ -5417,6 +5788,7 @@
 
     bindEvents();
     bindTagColorModalEvents();
+    bindFindPathModalEvents();
 
     // Check if URL has a ?save=... parameter to auto-load
     const urlParams = new URLSearchParams(window.location.search);

@@ -729,6 +729,175 @@ html, body {
   outline-offset: 2px;
 }
 
+/* ==================== SHORTEST PATH FINDER MODAL & HUD ==================== */
+.active-path-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(250, 204, 21, 0.55);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  color: var(--text-main);
+  max-width: calc(100% - 24px);
+}
+
+.active-path-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #facc15;
+  box-shadow: 0 0 8px #facc15;
+  flex-shrink: 0;
+}
+
+.active-path-banner-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-endpoints-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.path-swap-btn {
+  height: 35px;
+  flex-shrink: 0;
+}
+
+.select-input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  color: var(--text-main);
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.select-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.path-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 310px;
+  overflow-y: auto;
+}
+
+.path-option-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.path-option-card:hover {
+  border-color: var(--border-default);
+  background: var(--bg-panel-elevated);
+}
+
+.path-option-card.active {
+  border-color: #facc15;
+  background: rgba(250, 204, 21, 0.08);
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.28) inset;
+}
+
+.path-option-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.path-option-radio {
+  color: #facc15;
+  font-size: 14px;
+}
+
+.path-option-title {
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.path-highlight-status {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.path-option-card.active .path-highlight-status {
+  color: #fde047;
+}
+
+.path-chain-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.path-room-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.path-step-arrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #facc15;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.path-step-arrow.warp {
+  color: #c084fc;
+}
+
+.path-step-arrow small {
+  font-size: 10.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(250, 204, 21, 0.14);
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  color: #fef08a;
+}
+
+.path-step-arrow.warp small {
+  background: rgba(168, 85, 247, 0.16);
+  border-color: rgba(192, 132, 252, 0.4);
+  color: #e9d5ff;
+}
+
 /* ==================== INTERACTIVE MAP CANVAS ==================== */
 .map-container {
   flex: 1;
@@ -894,6 +1063,29 @@ html, body {
   font-weight: 700 !important;
 }
 
+/* Shortest Path Highlighting on Connections & Rooms */
+.conn-group.path-highlight {
+  opacity: 1 !important;
+}
+
+.conn-group.path-highlight .conn-path {
+  stroke: #facc15 !important;
+  stroke-width: 3.6px !important;
+  filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.72));
+}
+
+.conn-group.path-highlight .conn-label-bg {
+  stroke: #facc15 !important;
+  stroke-width: 1.5px !important;
+  fill: rgba(66, 32, 6, 0.94) !important;
+  opacity: 1 !important;
+}
+
+.conn-group.path-highlight .conn-label-text {
+  fill: #fef08a !important;
+  font-weight: 700 !important;
+}
+
 /* Sidebar Connection Search Item */
 .conn-search-item {
   border-left: 3px solid #64748b;
@@ -968,6 +1160,28 @@ html, body {
 .room-node.search-match .room-card-bg {
   stroke: #10b981;
   stroke-width: 2.4px;
+}
+
+.room-node.path-highlight .room-card-bg {
+  stroke: #facc15;
+  stroke-width: 2.8px;
+  fill: #1b2234;
+  filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.42));
+}
+
+.path-step-badge-bg {
+  fill: #facc15;
+  stroke: #0f172a;
+  stroke-width: 1.5px;
+}
+
+.path-step-badge-text {
+  fill: #0f172a;
+  font-size: 10px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
 }
 
 .room-accent-bar {
@@ -2165,6 +2379,7 @@ textarea {
 
   #btn-undo,
   #btn-auto-arrange,
+  #btn-find-path,
   #btn-share-link,
   #btn-backups,
   #btn-file-menu {
@@ -2172,6 +2387,11 @@ textarea {
     height: 34px;
     padding: 0;
     justify-content: center;
+  }
+
+  .path-endpoints-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   /* Left Sidebar becomes an individual modal dialog on mobile */
