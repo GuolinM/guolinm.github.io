@@ -1377,6 +1377,37 @@ html, body {
   gap: 12px;
 }
 
+.legend-pill {
+  pointer-events: auto;
+}
+
+.legend-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border-default);
+}
+
+.legend-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.legend-checkbox-label:hover {
+  color: var(--text-main);
+}
+
+.legend-checkbox-label input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
 .legend-item {
   display: inline-flex;
   align-items: center;

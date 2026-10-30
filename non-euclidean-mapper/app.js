@@ -9,6 +9,7 @@
   // ==================== CONSTANTS ====================
   const STORAGE_KEY_CURRENT = "non_euclidean_mapper_current_v1";
   const STORAGE_KEY_BACKUPS = "non_euclidean_mapper_backups_v1";
+  const STORAGE_KEY_PREFS = "non_euclidean_mapper_prefs_v1";
   const MAX_AUTO_BACKUPS = 25;
 
   const NODE_W = 168;
@@ -192,6 +193,39 @@
   let selectedConnectionId = null;
   let isMultiSelectMode = false;
   let multiSelectedRoomIds = new Set();
+
+  // User Preferences (persisted in localStorage)
+  let userPrefs = {
+    showDirectionalLabels: false, // false = hide N/S/E/W/NE/NW/SE/SW on normal connections by default
+  };
+
+  function loadUserPreferences() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_PREFS);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          if (typeof parsed.showDirectionalLabels === "boolean") {
+            userPrefs.showDirectionalLabels = parsed.showDirectionalLabels;
+          }
+        }
+      }
+    } catch (e) {
+      // ignore storage errors
+    }
+    const toggleEl = document.getElementById("toggle-show-directional-labels");
+    if (toggleEl) {
+      toggleEl.checked = Boolean(userPrefs.showDirectionalLabels);
+    }
+  }
+
+  function saveUserPreferences() {
+    try {
+      localStorage.setItem(STORAGE_KEY_PREFS, JSON.stringify(userPrefs));
+    } catch (e) {
+      // ignore storage errors
+    }
+  }
 
   // Search & Filter state (Priority 4)
   let searchQuery = "";
@@ -1324,12 +1358,13 @@
         g.appendChild(createSvgEl("path", pathAttrs));
       }
 
-      // Render Exit Label(s) (skip pure cardinal/ordinal directions on normal non-self-loops; Warps, Up/Down, and custom labels are shown)
+      // Render Exit Label(s) (skip pure cardinal/ordinal directions on normal non-self-loops unless userPrefs.showDirectionalLabels is enabled; Warps, Up/Down, and custom labels are always shown)
       const isSelfLoop = conn.fromRoomId === conn.toRoomId;
+      const showDir = Boolean(userPrefs.showDirectionalLabels);
       if (
         conn.label &&
         geom.fromLabelPos &&
-        (isSelfLoop || isWarp || !isCardinalOrOrdinalOnlyLabel(conn.label))
+        (showDir || isSelfLoop || isWarp || !isCardinalOrOrdinalOnlyLabel(conn.label))
       ) {
         const prefix = !conn.bidirectional ? "→ " : "";
         renderSvgLabelBadge(g, geom.fromLabelPos.x, geom.fromLabelPos.y, prefix + conn.label);
@@ -1338,7 +1373,7 @@
         conn.bidirectional &&
         conn.reverseLabel &&
         geom.toLabelPos &&
-        (isWarp || !isCardinalOrOrdinalOnlyLabel(conn.reverseLabel))
+        (showDir || isWarp || !isCardinalOrOrdinalOnlyLabel(conn.reverseLabel))
       ) {
         renderSvgLabelBadge(g, geom.toLabelPos.x, geom.toLabelPos.y, conn.reverseLabel);
       }
@@ -6091,9 +6126,22 @@
       appState = createEmptyMapState("Untitled Map");
     }
 
+    loadUserPreferences();
     bindEvents();
     bindTagColorModalEvents();
     bindFindPathModalEvents();
+
+    const dirLabelsToggle = document.getElementById("toggle-show-directional-labels");
+    if (dirLabelsToggle) {
+      dirLabelsToggle.addEventListener("change", (e) => {
+        userPrefs.showDirectionalLabels = Boolean(e.target.checked);
+        saveUserPreferences();
+        renderMainMap();
+        if (!document.getElementById("modal-add-connection")?.classList.contains("hidden")) {
+          renderConnectionModalUI();
+        }
+      });
+    }
 
     // Check if URL has a ?save=... parameter to auto-load
     const urlParams = new URLSearchParams(window.location.search);
