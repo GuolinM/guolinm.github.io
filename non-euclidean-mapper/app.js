@@ -1535,16 +1535,12 @@
         });
         const tagColor = getTagColor(t);
         if (tagColor === RAINBOW_COLOR) {
-          tagRect.setAttribute(
-            "fill",
-            isNestedPicker ? "url(#nested-rainbow-tag-bg-gradient)" : "url(#rainbow-tag-bg-gradient)"
-          );
-          tagRect.setAttribute(
-            "stroke",
-            isNestedPicker
-              ? "url(#nested-rainbow-tag-stroke-gradient)"
-              : "url(#rainbow-tag-stroke-gradient)"
-          );
+          tagRect.style.fill = isNestedPicker
+            ? "url(#nested-rainbow-tag-bg-gradient)"
+            : "url(#rainbow-tag-bg-gradient)";
+          tagRect.style.stroke = isNestedPicker
+            ? "url(#nested-rainbow-tag-stroke-gradient)"
+            : "url(#rainbow-tag-stroke-gradient)";
           tagTxt.style.fill = "#f8fafc";
         } else if (tagColor) {
           tagRect.style.fill = hexToRgba(tagColor, 0.24);
@@ -3580,12 +3576,7 @@
       });
     }
     document.getElementById("btn-close-tag-colors").addEventListener("click", closeTagColorModal);
-    document.getElementById("btn-tag-color-done").addEventListener("click", () => {
-      if (tagColorModalState.pendingRenames.size > 0) {
-        applyTagRenamesMap(Array.from(tagColorModalState.pendingRenames.entries()));
-      }
-      closeTagColorModal();
-    });
+    document.getElementById("btn-tag-color-done").addEventListener("click", closeTagColorModal);
 
     const saveRenamesBtn = document.getElementById("btn-tag-save-renames");
     if (saveRenamesBtn) {

@@ -2980,17 +2980,17 @@ textarea {
             </linearGradient>
             <!-- Horizontal rainbow gradient for SVG tag badges -->
             <linearGradient id="rainbow-tag-bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#ef4444" stop-opacity="0.34" />
-              <stop offset="20%" stop-color="#f97316" stop-opacity="0.34" />
-              <stop offset="40%" stop-color="#eab308" stop-opacity="0.34" />
-              <stop offset="60%" stop-color="#10b981" stop-opacity="0.34" />
-              <stop offset="80%" stop-color="#06b6d4" stop-opacity="0.34" />
-              <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.34" />
+              <stop offset="0%" stop-color="#ef4444" stop-opacity="0.55" />
+              <stop offset="20%" stop-color="#f97316" stop-opacity="0.55" />
+              <stop offset="40%" stop-color="#eab308" stop-opacity="0.55" />
+              <stop offset="60%" stop-color="#10b981" stop-opacity="0.55" />
+              <stop offset="80%" stop-color="#06b6d4" stop-opacity="0.55" />
+              <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.55" />
             </linearGradient>
             <linearGradient id="rainbow-tag-stroke-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#ef4444" stop-opacity="0.85" />
-              <stop offset="50%" stop-color="#10b981" stop-opacity="0.85" />
-              <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.85" />
+              <stop offset="0%" stop-color="#ef4444" stop-opacity="0.95" />
+              <stop offset="50%" stop-color="#10b981" stop-opacity="0.95" />
+              <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.95" />
             </linearGradient>
           </defs>
 
@@ -3637,8 +3637,6 @@ textarea {
               <input id="tag-color-picker" type="color" class="color-wheel-input" value="#0ea5e9" title="Pick custom color" />
               <input id="tag-color-hex-input" type="text" class="hex-text-input" placeholder="#RRGGBB, rainbow, or default" maxlength="12" />
               <button id="btn-tag-color-apply-hex" type="button" class="btn btn-secondary btn-xs">Use</button>
-              <button id="btn-tag-color-apply" type="button" class="btn btn-primary btn-xs" style="margin-left: auto;">Apply Color to Selected</button>
-              <button id="btn-tag-color-clear" type="button" class="btn btn-ghost btn-xs">Reset Color</button>
             </div>
           </div>
 
@@ -3663,8 +3661,10 @@ textarea {
           </div>
 
           <div class="modal-footer">
-            <button id="btn-tag-save-renames" type="button" class="btn btn-primary hidden">Save Renamed Tags</button>
-            <button id="btn-tag-color-done" type="button" class="btn btn-secondary">Done</button>
+            <button id="btn-tag-color-clear" type="button" class="btn btn-ghost" style="margin-right: auto;">Reset Color</button>
+            <button id="btn-tag-save-renames" type="button" class="btn btn-secondary hidden">Save Renamed Tags</button>
+            <button id="btn-tag-color-apply" type="button" class="btn btn-primary">Apply Color to Selected</button>
+            <button id="btn-tag-color-done" type="button" class="btn btn-secondary">Exit</button>
           </div>
         </div>
       </div>
@@ -3790,17 +3790,17 @@ textarea {
                     <stop offset="100%" stop-color="#8b5cf6" />
                   </linearGradient>
                   <linearGradient id="nested-rainbow-tag-bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#ef4444" stop-opacity="0.34" />
-                    <stop offset="20%" stop-color="#f97316" stop-opacity="0.34" />
-                    <stop offset="40%" stop-color="#eab308" stop-opacity="0.34" />
-                    <stop offset="60%" stop-color="#10b981" stop-opacity="0.34" />
-                    <stop offset="80%" stop-color="#06b6d4" stop-opacity="0.34" />
-                    <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.34" />
+                    <stop offset="0%" stop-color="#ef4444" stop-opacity="0.55" />
+                    <stop offset="20%" stop-color="#f97316" stop-opacity="0.55" />
+                    <stop offset="40%" stop-color="#eab308" stop-opacity="0.55" />
+                    <stop offset="60%" stop-color="#10b981" stop-opacity="0.55" />
+                    <stop offset="80%" stop-color="#06b6d4" stop-opacity="0.55" />
+                    <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.55" />
                   </linearGradient>
                   <linearGradient id="nested-rainbow-tag-stroke-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stop-color="#ef4444" stop-opacity="0.85" />
-                    <stop offset="50%" stop-color="#10b981" stop-opacity="0.85" />
-                    <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.85" />
+                    <stop offset="0%" stop-color="#ef4444" stop-opacity="0.95" />
+                    <stop offset="50%" stop-color="#10b981" stop-opacity="0.95" />
+                    <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.95" />
                   </linearGradient>
                   <marker id="nested-arrow-search-match" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
                     <path d="M 1 2 L 10 6 L 1 10 z" fill="#10b981" />
@@ -6025,16 +6025,12 @@ textarea {
         });
         const tagColor = getTagColor(t);
         if (tagColor === RAINBOW_COLOR) {
-          tagRect.setAttribute(
-            "fill",
-            isNestedPicker ? "url(#nested-rainbow-tag-bg-gradient)" : "url(#rainbow-tag-bg-gradient)"
-          );
-          tagRect.setAttribute(
-            "stroke",
-            isNestedPicker
-              ? "url(#nested-rainbow-tag-stroke-gradient)"
-              : "url(#rainbow-tag-stroke-gradient)"
-          );
+          tagRect.style.fill = isNestedPicker
+            ? "url(#nested-rainbow-tag-bg-gradient)"
+            : "url(#rainbow-tag-bg-gradient)";
+          tagRect.style.stroke = isNestedPicker
+            ? "url(#nested-rainbow-tag-stroke-gradient)"
+            : "url(#rainbow-tag-stroke-gradient)";
           tagTxt.style.fill = "#f8fafc";
         } else if (tagColor) {
           tagRect.style.fill = hexToRgba(tagColor, 0.24);
@@ -8070,12 +8066,7 @@ textarea {
       });
     }
     document.getElementById("btn-close-tag-colors").addEventListener("click", closeTagColorModal);
-    document.getElementById("btn-tag-color-done").addEventListener("click", () => {
-      if (tagColorModalState.pendingRenames.size > 0) {
-        applyTagRenamesMap(Array.from(tagColorModalState.pendingRenames.entries()));
-      }
-      closeTagColorModal();
-    });
+    document.getElementById("btn-tag-color-done").addEventListener("click", closeTagColorModal);
 
     const saveRenamesBtn = document.getElementById("btn-tag-save-renames");
     if (saveRenamesBtn) {
