@@ -760,7 +760,6 @@ html, body {
   border-radius: var(--radius-sm);
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
-  cursor: pointer;
   font-size: 12px;
 }
 
@@ -772,6 +771,23 @@ html, body {
 .tag-color-row input[type="checkbox"] {
   width: auto;
   margin: 0;
+  cursor: pointer;
+}
+
+.tag-rename-input {
+  width: 145px;
+  min-width: 90px;
+  padding: 3px 7px;
+  font-size: 12px;
+  border-radius: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  color: var(--text-main);
+}
+
+.tag-rename-input.modified {
+  border-color: #facc15;
+  background: rgba(250, 204, 21, 0.08);
 }
 
 .tag-color-row-meta {

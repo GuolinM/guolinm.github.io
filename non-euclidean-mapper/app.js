@@ -3146,10 +3146,11 @@
     forkModalState.parentRoomId = null;
   }
 
-  // ==================== TAG COLORS MODAL ====================
+  // ==================== EDIT TAGS MODAL (COLORS & MASS RENAME) ====================
   const tagColorModalState = {
     color: DEFAULT_TAG_COLOR,
     selected: new Set(),
+    pendingRenames: new Map(), // oldTag -> newTagDraft
     search: "",
   };
 
@@ -3188,6 +3189,7 @@
       return;
     }
     tagColorModalState.selected = new Set(preselectTags.filter((t) => counts.has(t)));
+    tagColorModalState.pendingRenames = new Map();
     tagColorModalState.search = "";
     const firstColored = Array.from(tagColorModalState.selected)
       .map((t) => getTagColor(t))
@@ -3196,12 +3198,150 @@
 
     const searchInput = document.getElementById("tag-color-search");
     if (searchInput) searchInput.value = "";
+    const massRenameInput = document.getElementById("tag-mass-rename-input");
+    if (massRenameInput) massRenameInput.value = "";
     document.getElementById("modal-tag-colors").classList.remove("hidden");
     renderTagColorModal();
   }
 
   function closeTagColorModal() {
     document.getElementById("modal-tag-colors").classList.add("hidden");
+  }
+
+  /**
+   * Applies a map of tag renames ({ oldTag -> newTag }) globally across all rooms,
+   * tagColors, and activeTagFilters. Supports merging multiple tags into the same target name.
+   */
+  function applyTagRenamesMap(renameEntries) {
+    const validPairs = [];
+    for (const [oldTag, rawNew] of renameEntries) {
+      const cleanNew = String(rawNew ?? "")
+        .trim()
+        .replace(/^#/, "");
+      if (oldTag && cleanNew && cleanNew !== oldTag) {
+        validPairs.push([oldTag, cleanNew]);
+      }
+    }
+    if (validPairs.length === 0) return 0;
+
+    pushUndoSnapshot();
+    const renameMap = new Map(validPairs);
+    const colorsMap = getTagColorsMap();
+
+    // Carry over tag colors from renamed tags if the destination tag doesn't already have a color
+    for (const [oldTag, newTag] of renameMap.entries()) {
+      const oldColor = colorsMap[oldTag];
+      if (oldColor && !colorsMap[newTag]) {
+        colorsMap[newTag] = oldColor;
+      }
+      delete colorsMap[oldTag];
+    }
+
+    // Update all rooms' tag arrays (preserving order and deduplicating when merging)
+    let roomsUpdated = 0;
+    for (const room of appState.rooms) {
+      if (!Array.isArray(room.tags) || room.tags.length === 0) continue;
+      let changed = false;
+      const nextTags = [];
+      const seen = new Set();
+      for (const t of room.tags) {
+        const mapped = renameMap.has(t) ? renameMap.get(t) : t;
+        if (mapped !== t) changed = true;
+        if (!seen.has(mapped)) {
+          seen.add(mapped);
+          nextTags.push(mapped);
+        } else {
+          changed = true;
+        }
+      }
+      if (changed) {
+        room.tags = nextTags;
+        roomsUpdated++;
+      }
+    }
+
+    // Update active tag filters and modal selection
+    for (const [oldTag, newTag] of renameMap.entries()) {
+      if (activeTagFilters.has(oldTag)) {
+        activeTagFilters.delete(oldTag);
+        activeTagFilters.add(newTag);
+      }
+      if (tagColorModalState.selected.has(oldTag)) {
+        tagColorModalState.selected.delete(oldTag);
+        tagColorModalState.selected.add(newTag);
+      }
+      tagColorModalState.pendingRenames.delete(oldTag);
+    }
+
+    saveStateToLocal();
+    renderAll();
+    renderTagColorModal();
+
+    if (validPairs.length === 1) {
+      const [fromT, toT] = validPairs[0];
+      showToast(`Renamed #${fromT} → #${toT} (${roomsUpdated} room${roomsUpdated === 1 ? "" : "s"})`);
+    } else {
+      const uniqueTargets = new Set(validPairs.map((p) => p[1]));
+      if (uniqueTargets.size === 1) {
+        const targetName = Array.from(uniqueTargets)[0];
+        showToast(
+          `Merged ${validPairs.length} tags into #${targetName} (${roomsUpdated} room${
+            roomsUpdated === 1 ? "" : "s"
+          })`
+        );
+      } else {
+        showToast(
+          `Renamed ${validPairs.length} tags across ${roomsUpdated} room${roomsUpdated === 1 ? "" : "s"}`
+        );
+      }
+    }
+    return validPairs.length;
+  }
+
+  function updateEditTagsFooterAndCounts() {
+    const selCount = tagColorModalState.selected.size;
+    const selCountEl = document.getElementById("tag-color-selected-count");
+    if (selCountEl) selCountEl.textContent = String(selCount);
+
+    let pendingCount = 0;
+    for (const [oldTag, draft] of tagColorModalState.pendingRenames.entries()) {
+      const clean = String(draft ?? "")
+        .trim()
+        .replace(/^#/, "");
+      if (clean && clean !== oldTag) pendingCount++;
+    }
+    const pendingCountEl = document.getElementById("tag-pending-rename-count");
+    if (pendingCountEl) pendingCountEl.textContent = String(pendingCount);
+
+    const saveRenamesBtn = document.getElementById("btn-tag-save-renames");
+    if (saveRenamesBtn) {
+      saveRenamesBtn.classList.toggle("hidden", pendingCount === 0);
+      saveRenamesBtn.textContent = `Save ${pendingCount} Renamed Tag${pendingCount === 1 ? "" : "s"}`;
+    }
+
+    const applyBtn = document.getElementById("btn-tag-color-apply");
+    if (applyBtn) {
+      applyBtn.disabled = selCount === 0;
+      applyBtn.textContent =
+        selCount > 0 ? `Apply Color to ${selCount} Tag${selCount === 1 ? "" : "s"}` : "Apply Color to Selected";
+    }
+    const clearBtn = document.getElementById("btn-tag-color-clear");
+    if (clearBtn) {
+      clearBtn.disabled = !Array.from(tagColorModalState.selected).some((t) => getTagColor(t));
+    }
+
+    const massRenameInput = document.getElementById("tag-mass-rename-input");
+    const massRenameBtn = document.getElementById("btn-tag-mass-rename");
+    if (massRenameBtn) {
+      const targetVal = (massRenameInput ? massRenameInput.value : "").trim().replace(/^#/, "");
+      massRenameBtn.disabled = selCount === 0 || !targetVal;
+      massRenameBtn.textContent =
+        selCount > 1
+          ? `Merge ${selCount} Selected → ${targetVal ? "#" + targetVal : "..."}`
+          : selCount === 1
+          ? `Rename Selected → ${targetVal ? "#" + targetVal : "..."}`
+          : "Rename Selected";
+    }
   }
 
   function renderTagColorModal() {
@@ -3269,6 +3409,10 @@
     for (const t of Array.from(tagColorModalState.selected)) {
       if (!counts.has(t)) tagColorModalState.selected.delete(t);
     }
+    for (const t of Array.from(tagColorModalState.pendingRenames.keys())) {
+      if (!counts.has(t)) tagColorModalState.pendingRenames.delete(t);
+    }
+
     const q = tagColorModalState.search.trim().toLowerCase();
     const listEl = document.getElementById("tag-color-list");
     listEl.innerHTML = "";
@@ -3280,24 +3424,91 @@
     for (const tag of visibleTags) {
       const isChecked = tagColorModalState.selected.has(tag);
       const current = getTagColor(tag);
-      const row = document.createElement("label");
+      const draftName = tagColorModalState.pendingRenames.has(tag)
+        ? tagColorModalState.pendingRenames.get(tag)
+        : tag;
+      const isModifiedName =
+        draftName.trim().replace(/^#/, "") !== "" &&
+        draftName.trim().replace(/^#/, "") !== tag;
+
+      const row = document.createElement("div");
       row.className = "tag-color-row" + (isChecked ? " checked" : "");
       const tc = tagColorAttrs(tag);
       row.innerHTML = `
-        <input type="checkbox" ${isChecked ? "checked" : ""} />
-        <span class="tag-pill${tc.cls}"${tc.style}>#${escapeHtml(tag)}</span>
+        <input type="checkbox" class="tag-row-check" ${isChecked ? "checked" : ""} aria-label="Select #${escapeHtml(
+          tag
+        )}" />
+        <span class="tag-pill${tc.cls}"${tc.style} title="Click to toggle selection">#${escapeHtml(tag)}</span>
+        <input type="text" class="tag-rename-input${
+          isModifiedName ? " modified" : ""
+        }" value="${escapeHtml(draftName)}" placeholder="Rename tag..." aria-label="Rename #${escapeHtml(
+          tag
+        )}" title="Edit tag name (Enter to save, or edit multiple and click Save Renamed Tags)" />
         <span class="tag-color-row-meta">${counts.get(tag)} room${counts.get(tag) === 1 ? "" : "s"}${
           current ? ` &middot; <code>${escapeHtml(current)}</code>` : " &middot; default"
         }</span>
+        <button type="button" class="btn btn-xs btn-secondary tag-color-row-rename${
+          isModifiedName ? "" : " hidden"
+        }" title="Rename #${escapeHtml(tag)} now">Rename</button>
         <button type="button" class="btn btn-xs btn-ghost tag-color-row-apply" title="Apply current color to #${escapeHtml(
           tag
-        )} only">Apply</button>
+        )} only">Color</button>
       `;
-      row.querySelector("input").addEventListener("change", (e) => {
-        if (e.target.checked) tagColorModalState.selected.add(tag);
+
+      const checkboxEl = row.querySelector(".tag-row-check");
+      const pillEl = row.querySelector(".tag-pill");
+      const renameInputEl = row.querySelector(".tag-rename-input");
+      const renameBtnEl = row.querySelector(".tag-color-row-rename");
+
+      const toggleRowCheck = (checked) => {
+        if (checked) tagColorModalState.selected.add(tag);
         else tagColorModalState.selected.delete(tag);
-        renderTagColorModal();
+        row.classList.toggle("checked", checked);
+        checkboxEl.checked = checked;
+        updateEditTagsFooterAndCounts();
+      };
+
+      checkboxEl.addEventListener("change", (e) => {
+        toggleRowCheck(e.target.checked);
       });
+      pillEl.addEventListener("click", () => {
+        toggleRowCheck(!tagColorModalState.selected.has(tag));
+      });
+
+      renameInputEl.addEventListener("input", () => {
+        const val = renameInputEl.value;
+        const clean = val.trim().replace(/^#/, "");
+        if (clean && clean !== tag) {
+          tagColorModalState.pendingRenames.set(tag, val);
+          renameInputEl.classList.add("modified");
+          renameBtnEl.classList.remove("hidden");
+        } else {
+          tagColorModalState.pendingRenames.delete(tag);
+          renameInputEl.classList.remove("modified");
+          renameBtnEl.classList.add("hidden");
+        }
+        updateEditTagsFooterAndCounts();
+      });
+
+      renameInputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const clean = renameInputEl.value.trim().replace(/^#/, "");
+          if (clean && clean !== tag) {
+            applyTagRenamesMap([[tag, clean]]);
+          }
+        }
+      });
+
+      renameBtnEl.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const clean = renameInputEl.value.trim().replace(/^#/, "");
+        if (clean && clean !== tag) {
+          applyTagRenamesMap([[tag, clean]]);
+        }
+      });
+
       row.querySelector(".tag-color-row-apply").addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -3306,13 +3517,7 @@
       listEl.appendChild(row);
     }
 
-    const selCount = tagColorModalState.selected.size;
-    document.getElementById("tag-color-selected-count").textContent = String(selCount);
-    const applyBtn = document.getElementById("btn-tag-color-apply");
-    applyBtn.disabled = selCount === 0;
-    applyBtn.textContent = selCount > 0 ? `Apply to ${selCount} Tag${selCount === 1 ? "" : "s"}` : "Apply to Selected";
-    const clearBtn = document.getElementById("btn-tag-color-clear");
-    clearBtn.disabled = !Array.from(tagColorModalState.selected).some((t) => getTagColor(t));
+    updateEditTagsFooterAndCounts();
   }
 
   function applyColorToTags(tags, color) {
@@ -3340,7 +3545,45 @@
       });
     }
     document.getElementById("btn-close-tag-colors").addEventListener("click", closeTagColorModal);
-    document.getElementById("btn-tag-color-done").addEventListener("click", closeTagColorModal);
+    document.getElementById("btn-tag-color-done").addEventListener("click", () => {
+      if (tagColorModalState.pendingRenames.size > 0) {
+        applyTagRenamesMap(Array.from(tagColorModalState.pendingRenames.entries()));
+      }
+      closeTagColorModal();
+    });
+
+    const saveRenamesBtn = document.getElementById("btn-tag-save-renames");
+    if (saveRenamesBtn) {
+      saveRenamesBtn.addEventListener("click", () => {
+        applyTagRenamesMap(Array.from(tagColorModalState.pendingRenames.entries()));
+      });
+    }
+
+    const massRenameInput = document.getElementById("tag-mass-rename-input");
+    const massRenameBtn = document.getElementById("btn-tag-mass-rename");
+    const runMassRenameSelected = () => {
+      if (!massRenameInput) return;
+      const targetName = massRenameInput.value.trim().replace(/^#/, "");
+      if (!targetName || tagColorModalState.selected.size === 0) return;
+      const entries = Array.from(tagColorModalState.selected).map((oldTag) => [oldTag, targetName]);
+      const count = applyTagRenamesMap(entries);
+      if (count > 0) {
+        massRenameInput.value = "";
+        updateEditTagsFooterAndCounts();
+      }
+    };
+    if (massRenameInput) {
+      massRenameInput.addEventListener("input", updateEditTagsFooterAndCounts);
+      massRenameInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          runMassRenameSelected();
+        }
+      });
+    }
+    if (massRenameBtn) {
+      massRenameBtn.addEventListener("click", runMassRenameSelected);
+    }
 
     const applyHex = () => {
       const raw = (document.getElementById("tag-color-hex-input").value || "").trim().toLowerCase();
